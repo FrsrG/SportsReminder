@@ -1,0 +1,114 @@
+import React, { useState } from 'react';
+
+export default function FullScheduleModal({ allTrackedGames, reminderLeadTime, gameReminders = {}, onToggleGameReminder }) {
+  const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'past'
+
+  const now = new Date();
+
+  // Filter Upcoming vs Past games
+  const upcomingGames = allTrackedGames.filter(g => {
+    const isCompleted = g.completed || g.status === 'STATUS_FULL_TIME' || g.status === 'STATUS_FINAL';
+    const matchEndTimeMs = new Date(g.date).getTime() + (2.5 * 60 * 60 * 1000);
+    return !isCompleted && matchEndTimeMs >= now.getTime();
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const pastGames = allTrackedGames.filter(g => {
+    const isCompleted = g.completed || g.status === 'STATUS_FULL_TIME' || g.status === 'STATUS_FINAL';
+    const matchEndTimeMs = new Date(g.date).getTime() + (2.5 * 60 * 60 * 1000);
+    return isCompleted || matchEndTimeMs < now.getTime();
+  }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Most recent past games first
+
+  const displayGames = activeTab === 'upcoming' ? upcomingGames : pastGames;
+
+  return (
+    <div className="full-schedule-container">
+      {/* Sleek Sub-Tabs */}
+      <div className="modal-tabs" style={{ marginBottom: '12px' }}>
+        <button 
+          className={`tab-btn ${activeTab === 'upcoming' ? 'active' : ''}`}
+          onClick={() => setActiveTab('upcoming')}
+        >
+          📅 Upcoming ({upcomingGames.length})
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'past' ? 'active' : ''}`}
+          onClick={() => setActiveTab('past')}
+        >
+          🏁 Past Results ({pastGames.length})
+        </button>
+      </div>
+
+      {/* Game List */}
+      <div className="modal-game-list" style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '4px' }}>
+        {displayGames.length === 0 ? (
+          <div className="empty-state">
+            {activeTab === 'upcoming' ? 'No upcoming games scheduled.' : 'No past game results available.'}
+          </div>
+        ) : (
+          displayGames.map((game, index) => {
+            const gameDate = new Date(game.date);
+            let dayStr = '';
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            if (gameDate.toDateString() === today.toDateString()) {
+              dayStr = 'Today';
+            } else if (gameDate.toDateString() === tomorrow.toDateString()) {
+              dayStr = 'Tomorrow';
+            } else {
+              dayStr = gameDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+            }
+
+            const timeStr = gameDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            const currentSetting = gameReminders[game.id] !== undefined ? gameReminders[game.id] : reminderLeadTime;
+            const isOff = currentSetting === 'off';
+
+            return (
+              <div key={game.id} className="game-card" style={{ marginBottom: '8px' }}>
+                <div className="game-teams">
+                  <div className="team-col">
+                    <img src={game.awayTeam.logo} alt={game.awayTeam.abbreviation} className="team-logo" />
+                    <span className="team-abbr">{game.awayTeam.abbreviation}</span>
+                  </div>
+                  <span className="vs-text">@</span>
+                  <div className="team-col">
+                    <img src={game.homeTeam.logo} alt={game.homeTeam.abbreviation} className="team-logo" />
+                    <span className="team-abbr">{game.homeTeam.abbreviation}</span>
+                  </div>
+                </div>
+
+                <div className="game-divider"></div>
+
+                <div className="game-info">
+                  <span className="game-day">{dayStr}</span>
+                  <span className="game-time">{timeStr}</span>
+                  <span className="game-arena">{game.venue}</span>
+                </div>
+
+                {activeTab === 'upcoming' ? (
+                  <div 
+                    className={`game-action ${isOff ? 'off' : ''}`}
+                    onClick={() => onToggleGameReminder && onToggleGameReminder(game.id, currentSetting)}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    title={isOff ? "Reminder Off (Click to set)" : `Reminder set for ${currentSetting} before match (Click to cycle)`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill={isOff ? "none" : "currentColor"} stroke="currentColor" strokeWidth="2">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span>{isOff ? 'Off' : currentSetting}</span>
+                  </div>
+                ) : (
+                  <div className="game-action off" style={{ cursor: 'default', background: 'rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+                    <span>FT</span>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}

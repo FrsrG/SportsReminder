@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Production build outputs
+dist/
+build/
+
+# Local env & IDE files
+.env
+.env.local
+.vscode/
+.idea/
+
+# OS metadata
+Thumbs.db
+.DS_Store
+
+# Temporary logs & caches
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

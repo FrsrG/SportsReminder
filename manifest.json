@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Remind Sports",
+  "version": "2.0.0",
+  "description": "Never miss a game. Get reminders for your favorite sports teams.",
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Remind Sports"
+  },
+  "options_page": "test.html",
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://site.api.espn.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["test.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
