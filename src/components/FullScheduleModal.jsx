@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function FullScheduleModal({ allTrackedGames, reminderLeadTime, gameReminders = {}, onToggleGameReminder }) {
+export default function FullScheduleModal({ allTrackedGames, reminderLeadTime, gameReminders = {}, onOpenAlarmModal }) {
   const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'past'
 
   const now = new Date();
@@ -16,7 +16,7 @@ export default function FullScheduleModal({ allTrackedGames, reminderLeadTime, g
     const isCompleted = g.completed || g.status === 'STATUS_FULL_TIME' || g.status === 'STATUS_FINAL';
     const matchEndTimeMs = new Date(g.date).getTime() + (2.5 * 60 * 60 * 1000);
     return isCompleted || matchEndTimeMs < now.getTime();
-  }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Most recent past games first
+  }).sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const displayGames = activeTab === 'upcoming' ? upcomingGames : pastGames;
 
@@ -61,8 +61,13 @@ export default function FullScheduleModal({ allTrackedGames, reminderLeadTime, g
             }
 
             const timeStr = gameDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-            const currentSetting = gameReminders[game.id] !== undefined ? gameReminders[game.id] : reminderLeadTime;
-            const isOff = currentSetting === 'off';
+
+            const activeAlarms = Array.isArray(gameReminders[game.id]) 
+              ? gameReminders[game.id] 
+              : (gameReminders[game.id] && gameReminders[game.id] !== 'off' ? [gameReminders[game.id]] : []);
+            
+            const activeCount = activeAlarms.length;
+            const isOff = activeCount === 0;
 
             return (
               <div key={game.id} className="game-card" style={{ marginBottom: '8px' }}>
@@ -89,15 +94,16 @@ export default function FullScheduleModal({ allTrackedGames, reminderLeadTime, g
                 {activeTab === 'upcoming' ? (
                   <div 
                     className={`game-action ${isOff ? 'off' : ''}`}
-                    onClick={() => onToggleGameReminder && onToggleGameReminder(game.id, currentSetting)}
+                    onClick={() => onOpenAlarmModal && onOpenAlarmModal(game)}
                     style={{ cursor: 'pointer', userSelect: 'none' }}
-                    title={isOff ? "Reminder Off (Click to set)" : `Reminder set for ${currentSetting} before match (Click to cycle)`}
+                    title={isOff ? "Reminder Off (Click to set alarms)" : `${activeCount} Alarm(s) Active (Click to edit)`}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill={isOff ? "none" : "currentColor"} stroke="currentColor" strokeWidth="2">
                       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                       <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                     </svg>
-                    <span>{isOff ? 'Off' : currentSetting}</span>
+                    <span>{isOff ? 'Off' : `${activeCount} Set`}</span>
+                    {!isOff && <span className="bell-badge">{activeCount}</span>}
                   </div>
                 ) : (
                   <div className="game-action off" style={{ cursor: 'default', background: 'rgba(255,255,255,0.05)', color: '#94a3b8' }}>

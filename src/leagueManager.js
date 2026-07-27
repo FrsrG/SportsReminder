@@ -4,35 +4,35 @@ import staticTeams from './staticTeams.json';
 
 export const SUPPORTED_LEAGUES = {
   soccer: [
-    { id: 'mls', name: 'MLS', sportSlug: 'soccer/usa.1', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/15.png' },
+    { id: 'mls', name: 'MLS', sportSlug: 'soccer/usa.1', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/19.png' },
     { id: 'epl', name: 'Premier League', sportSlug: 'soccer/eng.1', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/23.png' },
     { id: 'laliga', name: 'LALIGA', sportSlug: 'soccer/esp.1', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/15.png' },
     { id: 'ucl', name: 'UEFA Champions League', sportSlug: 'soccer/uefa.champions', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/2.png' },
-    { id: 'ligamx', name: 'Liga MX', sportSlug: 'soccer/mex.1', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/73.png' }
+    { id: 'ligamx', name: 'Liga MX', sportSlug: 'soccer/mex.1', logo: 'https://a.espncdn.com/i/leaguelogos/soccer/500/22.png' }
   ],
   football: [
-    { id: 'nfl', name: 'NFL', sportSlug: 'football/nfl', logo: 'https://a.espncdn.com/i/leaguelogos/football/500/nfl.png' },
-    { id: 'college-football', name: 'College Football', sportSlug: 'football/college-football', logo: 'https://a.espncdn.com/i/leaguelogos/football/500/college-football.png' }
+    { id: 'nfl', name: 'NFL', sportSlug: 'football/nfl', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png' },
+    { id: 'college-football', name: 'College Football', sportSlug: 'football/college-football', logo: 'https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-football-college.png' }
   ],
   basketball: [
-    { id: 'nba', name: 'NBA', sportSlug: 'basketball/nba', logo: 'https://a.espncdn.com/i/leaguelogos/basketball/500/nba.png' },
-    { id: 'wnba', name: 'WNBA', sportSlug: 'basketball/wnba', logo: 'https://a.espncdn.com/i/leaguelogos/basketball/500/wnba.png' },
-    { id: 'mens-college-basketball', name: 'NCAAM', sportSlug: 'basketball/mens-college-basketball', logo: 'https://a.espncdn.com/i/leaguelogos/basketball/500/mens-college-basketball.png' }
+    { id: 'nba', name: 'NBA', sportSlug: 'basketball/nba', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png' },
+    { id: 'wnba', name: 'WNBA', sportSlug: 'basketball/wnba', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/wnba.png' },
+    { id: 'mens-college-basketball', name: 'NCAAM', sportSlug: 'basketball/mens-college-basketball', logo: 'https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-basketball.png' }
   ],
   baseball: [
-    { id: 'mlb', name: 'MLB', sportSlug: 'baseball/mlb', logo: 'https://a.espncdn.com/i/leaguelogos/baseball/500/mlb.png' }
+    { id: 'mlb', name: 'MLB', sportSlug: 'baseball/mlb', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png' }
   ],
   hockey: [
-    { id: 'nhl', name: 'NHL', sportSlug: 'hockey/nhl', logo: 'https://a.espncdn.com/i/leaguelogos/hockey/500/nhl.png' }
+    { id: 'nhl', name: 'NHL', sportSlug: 'hockey/nhl', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png' }
   ],
   racing: [
-    { id: 'f1', name: 'Formula 1', sportSlug: 'racing/f1', logo: 'https://a.espncdn.com/i/leaguelogos/racing/500/f1.png' }
+    { id: 'f1', name: 'Formula 1', sportSlug: 'racing/f1', logo: 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/f1.png' }
   ],
   mma: [
-    { id: 'ufc', name: 'UFC', sportSlug: 'mma/ufc', logo: 'https://a.espncdn.com/i/leaguelogos/mma/500/ufc.png' }
+    { id: 'ufc', name: 'UFC', sportSlug: 'mma/ufc', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png' }
   ],
   golf: [
-    { id: 'pga', name: 'PGA Tour', sportSlug: 'golf/pga', logo: 'https://a.espncdn.com/i/leaguelogos/golf/500/pga.png' }
+    { id: 'pga', name: 'PGA Tour', sportSlug: 'golf/pga', logo: 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/pgatour.png' }
   ]
 };
 

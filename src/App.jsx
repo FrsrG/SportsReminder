@@ -11,11 +11,10 @@ import ExportModal from './components/ExportModal.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import HelpModal from './components/HelpModal.jsx';
 import FullScheduleModal from './components/FullScheduleModal.jsx';
+import GameAlarmModal from './components/GameAlarmModal.jsx';
 
 import { fetchLeagueScoreboard, extractGamesForTeams, fetchTeamSchedule } from './espnApi.js';
 import { loadLeagueTeams, preloadLeagueSchedules, LEAGUES_FLAT } from './leagueManager.js';
-
-const TIMING_SEQUENCE = ['15m', '30m', '45m', '1h', 'off'];
 
 export default function App() {
   const [selectedSport, setSelectedSport] = useState('soccer');
@@ -30,6 +29,7 @@ export default function App() {
   
   // Modal State
   const [activeModal, setActiveModal] = useState(null);
+  const [selectedGameForAlarm, setSelectedGameForAlarm] = useState(null);
 
   // Load Initial Data & Migration
   useEffect(() => {
@@ -178,15 +178,42 @@ export default function App() {
     }
   };
 
-  const handleToggleGameReminder = (gameId, currentSetting) => {
-    const currentIndex = TIMING_SEQUENCE.indexOf(currentSetting);
-    const nextIndex = (currentIndex + 1) % TIMING_SEQUENCE.length;
-    const nextSetting = TIMING_SEQUENCE[nextIndex];
+  const handleOpenAlarmModal = (game) => {
+    setSelectedGameForAlarm(game);
+    setActiveModal('game-alarm');
+  };
 
-    setGameReminders(prev => ({
-      ...prev,
-      [gameId]: nextSetting
-    }));
+  const handleToggleGameAlarm = (gameId, slotIsoKey) => {
+    setGameReminders(prev => {
+      const currentList = Array.isArray(prev[gameId]) 
+        ? prev[gameId] 
+        : (prev[gameId] && prev[gameId] !== 'off' ? [prev[gameId]] : []);
+      
+      let updatedList;
+      
+      const exists = currentList.some(a => {
+        if (a === slotIsoKey) return true;
+        const aMs = new Date(a).getTime();
+        const sMs = new Date(slotIsoKey).getTime();
+        return Math.abs(aMs - sMs) < 2000;
+      });
+
+      if (exists) {
+        updatedList = currentList.filter(a => {
+          if (a === slotIsoKey) return false;
+          const aMs = new Date(a).getTime();
+          const sMs = new Date(slotIsoKey).getTime();
+          return Math.abs(aMs - sMs) >= 2000;
+        });
+      } else {
+        updatedList = [...currentList, slotIsoKey];
+      }
+
+      return {
+        ...prev,
+        [gameId]: updatedList
+      };
+    });
   };
 
   const allTeams = allTeamsList;
@@ -243,7 +270,7 @@ export default function App() {
         onViewFullSchedule={() => setActiveModal('full-schedule')}
         reminderLeadTime={reminderLeadTime}
         gameReminders={gameReminders}
-        onToggleGameReminder={handleToggleGameReminder}
+        onOpenAlarmModal={handleOpenAlarmModal}
         limit={5}
       />
       
@@ -289,7 +316,7 @@ export default function App() {
           allTrackedGames={allTrackedGames} 
           reminderLeadTime={reminderLeadTime} 
           gameReminders={gameReminders}
-          onToggleGameReminder={handleToggleGameReminder}
+          onOpenAlarmModal={handleOpenAlarmModal}
         />
       </Modal>
 
@@ -299,10 +326,18 @@ export default function App() {
             games={upcomingTrackedGames.filter(g => new Date(g.date).toDateString() === new Date().toDateString())} 
             reminderLeadTime={reminderLeadTime} 
             gameReminders={gameReminders}
-            onToggleGameReminder={handleToggleGameReminder}
+            onOpenAlarmModal={handleOpenAlarmModal}
             limit={null}
           />
         </div>
+      </Modal>
+
+      <Modal isOpen={activeModal === 'game-alarm'} title="Set Match Reminders" onClose={() => setActiveModal(null)}>
+        <GameAlarmModal 
+          game={selectedGameForAlarm} 
+          activeAlarms={selectedGameForAlarm ? gameReminders[selectedGameForAlarm.id] : []} 
+          onToggleAlarm={handleToggleGameAlarm} 
+        />
       </Modal>
     </div>
   );

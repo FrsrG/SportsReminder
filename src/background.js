@@ -33,7 +33,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       type: 'basic',
       iconUrl: 'icon.png',
       title: message.title || '⚽ Remind Sports Desktop Alert',
-      message: message.message || 'Inter Miami CF vs CF Montréal starts in 15 minutes at Stade Saputo!',
+      message: message.message || 'Inter Miami CF vs CF Montréal starts soon!',
       priority: 2
     });
     sendResponse({ status: 'sent', notifId });
@@ -45,7 +45,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.set({
       [alarmId]: {
         title: message.matchTitle || 'TEST MATCH: MIA @ MTL',
-        message: `Reminder: Match starts in ${message.leadTime || '15m'} at ${message.venue || 'Stade Saputo'}!`
+        message: `Reminder: Match starts soon at ${message.venue || 'Stade Saputo'}!`
       }
     });
     
@@ -79,54 +79,41 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 async function checkGamesAndSetAlarms(trackedTeams) {
   try {
-    const response = await fetch(MLS_API_URL);
-    if (!response.ok) return;
-    const data = await response.json();
-    
-    if (!data.events) return;
-    
     const storageData = await new Promise(resolve => {
       chrome.storage.local.get(['gameReminders', 'reminderLeadTime'], resolve);
     });
     
     const gameReminders = storageData.gameReminders || {};
     const defaultLeadTime = storageData.reminderLeadTime || '1h';
-    const teamIds = trackedTeams.map(t => t.id);
     const now = new Date().getTime();
-    
-    data.events.forEach(event => {
-      const competition = event.competitions[0];
-      const competitors = competition.competitors;
-      const hasTrackedTeam = competitors.some(comp => teamIds.includes(comp.team.id));
-      
-      if (hasTrackedTeam) {
-        const gameSetting = gameReminders[event.id] !== undefined ? gameReminders[event.id] : defaultLeadTime;
-        
-        if (gameSetting === 'off') {
-          chrome.alarms.clear(`game-${event.id}`);
-          return;
-        }
-        
-        const leadMs = parseLeadTimeMs(gameSetting);
-        const gameTime = new Date(event.date).getTime();
-        const reminderTime = gameTime - leadMs;
-        
-        if (reminderTime > now) {
-          const alarmId = `game-${event.id}`;
-          const homeTeam = competitors.find(c => c.homeAway === 'home').team;
-          const awayTeam = competitors.find(c => c.homeAway === 'away').team;
-          const matchTitle = `${awayTeam.abbreviation} @ ${homeTeam.abbreviation} starting in ${gameSetting}!`;
-          
-          chrome.storage.local.set({
-            [alarmId]: {
-              title: matchTitle,
-              message: `The game starts soon at ${competition.venue ? competition.venue.fullName : 'TBD'}`
-            }
-          });
-          
-          chrome.alarms.create(alarmId, { when: reminderTime });
-          console.log(`Alarm set for ${matchTitle} at ${new Date(reminderTime).toLocaleTimeString()}`);
-        }
+
+    // Iterate through all configured gameReminders
+    Object.keys(gameReminders).forEach(gameId => {
+      const reminderSetting = gameReminders[gameId];
+      if (!reminderSetting || reminderSetting === 'off') return;
+
+      // Handle array of ISO timestamps (from iOS Alarm Modal)
+      if (Array.isArray(reminderSetting)) {
+        reminderSetting.forEach(isoTimeStr => {
+          const alarmTimeMs = new Date(isoTimeStr).getTime();
+          if (alarmTimeMs > now) {
+            const alarmId = `game-${gameId}-${alarmTimeMs}`;
+            const alarmClockStr = new Date(alarmTimeMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            
+            chrome.storage.local.set({
+              [alarmId]: {
+                title: `⏰ Match Reminder (${alarmClockStr})`,
+                message: `Your tracked match is starting soon! Don't miss kick-off/tip-off.`
+              }
+            });
+            
+            chrome.alarms.create(alarmId, { when: alarmTimeMs });
+          }
+        });
+      } else if (typeof reminderSetting === 'string') {
+        // Handle legacy single lead time string (e.g. '15m')
+        const leadMs = parseLeadTimeMs(reminderSetting);
+        // Set fallback alarm if needed
       }
     });
   } catch (error) {
