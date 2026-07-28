@@ -94,32 +94,54 @@ export async function fetchLeagueTeamsFromESPN(sportSlug) {
 }
 
 /**
+ * Helper to ensure team object always has valid sportSlug.
+ */
+export function ensureTeamSportSlug(team, defaultLeague = 'mls') {
+  if (!team) return team;
+  if (team.sportSlug) return team;
+
+  for (const [slug, teamsList] of Object.entries(staticTeams)) {
+    if (Array.isArray(teamsList) && teamsList.some(t => String(t.id) === String(team.id))) {
+      return { ...team, sportSlug: slug };
+    }
+  }
+
+  const activeLeagueData = LEAGUES_FLAT[defaultLeague] || LEAGUES_FLAT.mls;
+  return { ...team, sportSlug: activeLeagueData.sportSlug || 'soccer/usa.1' };
+}
+
+/**
  * Smart loader for teams: Returns static teams instantly, then updates from storage/ESPN API asynchronously.
  */
 export async function loadLeagueTeams(sportSlug) {
-  const fallback = staticTeams[sportSlug] || [];
+  const rawFallback = staticTeams[sportSlug] || [];
+  const fallback = rawFallback.map(t => ({ ...t, sportSlug: t.sportSlug || sportSlug }));
   const storageKey = `teams_cache_${sportSlug.replace('/', '_')}`;
   
+  const mapSlug = (teamsList) => (teamsList || []).map(t => ({ ...t, sportSlug: t.sportSlug || sportSlug }));
+
   return new Promise((resolve) => {
     // Return static fallback immediately if available to guarantee instant zero-wait UI rendering
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       chrome.storage.local.get([storageKey], async (result) => {
         if (result[storageKey] && result[storageKey].length > 0) {
-          resolve(result[storageKey]);
+          resolve(mapSlug(result[storageKey]));
         } else if (fallback.length > 0) {
           resolve(fallback);
           // Refresh from API in background and store
           fetchLeagueTeamsFromESPN(sportSlug).then(fresh => {
             if (fresh && fresh.length > 0) {
-              chrome.storage.local.set({ [storageKey]: fresh });
+              const mapped = mapSlug(fresh);
+              chrome.storage.local.set({ [storageKey]: mapped });
             }
           });
         } else {
           const teams = await fetchLeagueTeamsFromESPN(sportSlug);
-          if (teams && teams.length > 0) {
-            chrome.storage.local.set({ [storageKey]: teams });
+          const mapped = mapSlug(teams);
+          if (mapped && mapped.length > 0) {
+            chrome.storage.local.set({ [storageKey]: mapped });
           }
-          resolve(teams);
+          resolve(mapped);
         }
       });
     } else {
@@ -128,7 +150,7 @@ export async function loadLeagueTeams(sportSlug) {
         try {
           const parsed = JSON.parse(cached);
           if (parsed && parsed.length > 0) {
-            resolve(parsed);
+            resolve(mapSlug(parsed));
             return;
           }
         } catch (e) {}
@@ -138,15 +160,17 @@ export async function loadLeagueTeams(sportSlug) {
         resolve(fallback);
         fetchLeagueTeamsFromESPN(sportSlug).then(fresh => {
           if (fresh && fresh.length > 0) {
-            localStorage.setItem(storageKey, JSON.stringify(fresh));
+            const mapped = mapSlug(fresh);
+            localStorage.setItem(storageKey, JSON.stringify(mapped));
           }
         });
       } else {
         fetchLeagueTeamsFromESPN(sportSlug).then(teams => {
-          if (teams && teams.length > 0) {
-            localStorage.setItem(storageKey, JSON.stringify(teams));
+          const mapped = mapSlug(teams);
+          if (mapped && mapped.length > 0) {
+            localStorage.setItem(storageKey, JSON.stringify(mapped));
           }
-          resolve(teams);
+          resolve(mapped);
         });
       }
     }

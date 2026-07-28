@@ -50,18 +50,25 @@ export default function FavoritesModal({ allTeams = [], trackedTeams = [], onTog
           <div className="empty-state">No matching {leagueName} teams found for "{query}".</div>
         ) : (
           filtered.map(team => {
-            const isTracked = trackedTeams.some(t => String(t.id) === String(team.id));
+            const currentSlug = team.sportSlug || (leagueData ? leagueData.sportSlug : '');
+            const teamWithSlug = { ...team, sportSlug: currentSlug };
+            
+            const isTracked = trackedTeams.some(t => 
+              String(t.id) === String(teamWithSlug.id) && 
+              (t.sportSlug && teamWithSlug.sportSlug ? t.sportSlug === teamWithSlug.sportSlug : true)
+            );
+            
             const starFill = isTracked ? 'currentColor' : 'none';
             const starClass = isTracked ? 'star-btn starred' : 'star-btn';
             const logoUrl = team.logo || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="%2394a3b8"><circle cx="12" cy="12" r="12"/></svg>';
             
             return (
-              <div key={team.id} className="modal-team-item">
+              <div key={`${teamWithSlug.sportSlug || 'team'}-${teamWithSlug.id}`} className="modal-team-item">
                 <div className="team-info">
                   <img src={logoUrl} alt={team.abbreviation || team.name} className="team-logo" />
                   <span className="team-name">{team.name}</span>
                 </div>
-                <button className={starClass} onClick={() => onToggleTracked(team)}>
+                <button className={starClass} onClick={() => onToggleTracked(teamWithSlug)}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill={starFill} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                 </button>
               </div>

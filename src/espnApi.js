@@ -227,7 +227,9 @@ export function extractGamesForTeams(apiData, trackedTeams) {
     const hasTrackedTeam = competitors.length === 0 || (!trackedTeams || trackedTeams.length === 0) || competitors.some(comp => 
       comp.team && trackedTeams.some(tt => {
         const teamId = typeof tt === 'object' && tt !== null ? tt.id : String(tt);
-        return String(teamId) === String(comp.team.id);
+        const teamSlug = typeof tt === 'object' && tt !== null ? tt.sportSlug : null;
+        const idMatch = String(teamId) === String(comp.team.id);
+        return idMatch;
       })
     );
     

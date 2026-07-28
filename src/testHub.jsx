@@ -316,7 +316,7 @@ function TestHubApp() {
               <p style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 16px' }}>
                 Test real OS Desktop Notifications end-to-end. Click any button below to trigger a live Desktop Notification:
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
                 <button className="add-team-btn" style={{ padding: '14px', fontSize: '14px', fontWeight: 600 }} onClick={() => triggerTestAlarm(5)}>
                   ⚡ 5s Desktop Notification Test
                 </button>
@@ -325,6 +325,19 @@ function TestHubApp() {
                 </button>
                 <button className="cancel-team-btn" style={{ padding: '14px', fontSize: '14px', fontWeight: 600, color: '#4ade80', borderColor: '#4ade80', background: 'rgba(74,222,128,0.1)' }} onClick={() => triggerTestAlarm(1)}>
                   🔔 Send Desktop Notification Now
+                </button>
+                <button className="add-team-btn" style={{ padding: '14px', fontSize: '14px', fontWeight: 600, background: 'linear-gradient(180deg, #3870b2 0%, #204c82 100%)', borderColor: '#4a8adb' }} onClick={() => {
+                  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+                    chrome.runtime.sendMessage({ action: 'checkStartupReminders' });
+                    setStatusMessage('🚀 Browser startup game day check triggered!');
+                    setTimeout(() => setStatusMessage(''), 4000);
+                  } else {
+                    fireDesktopNotification('⏰ Game Day Reminder: MIA @ MTL', 'Match starts today at 7:30 PM (2 hours 15 minutes remaining)!');
+                    setStatusMessage('🚀 Browser startup test notification fired!');
+                    setTimeout(() => setStatusMessage(''), 4000);
+                  }
+                }}>
+                  🚀 Test Browser Startup Notification
                 </button>
               </div>
             </div>

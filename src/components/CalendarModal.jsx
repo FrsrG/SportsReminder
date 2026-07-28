@@ -22,8 +22,14 @@ function getGameResultInfo(game, trackedTeams = []) {
   const homeScoreNum = parseInt(hStr, 10);
   const awayScoreNum = parseInt(aStr, 10);
 
-  const isTrackedHome = trackedTeams.some(t => String(t.id) === String(game.homeTeam.id));
-  const isTrackedAway = trackedTeams.some(t => String(t.id) === String(game.awayTeam.id));
+  const isTrackedHome = trackedTeams.some(t => 
+    String(t.id) === String(game.homeTeam.id) && 
+    (t.sportSlug && game.sportSlug ? t.sportSlug === game.sportSlug : true)
+  );
+  const isTrackedAway = trackedTeams.some(t => 
+    String(t.id) === String(game.awayTeam.id) && 
+    (t.sportSlug && game.sportSlug ? t.sportSlug === game.sportSlug : true)
+  );
 
   let isWin = false;
   let isLoss = false;

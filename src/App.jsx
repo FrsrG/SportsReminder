@@ -15,7 +15,7 @@ import GameAlarmModal from './components/GameAlarmModal.jsx';
 import CalendarModal from './components/CalendarModal.jsx';
 
 import { fetchLeagueScoreboard, extractGamesForTeams, fetchTeamSchedule } from './espnApi.js';
-import { loadLeagueTeams, preloadLeagueSchedules, LEAGUES_FLAT } from './leagueManager.js';
+import { loadLeagueTeams, preloadLeagueSchedules, LEAGUES_FLAT, ensureTeamSportSlug } from './leagueManager.js';
 
 export default function App() {
   const [selectedSport, setSelectedSport] = useState('soccer');
@@ -23,6 +23,10 @@ export default function App() {
   const [trackedTeams, setTrackedTeams] = useState([]);
   const [reminderLeadTime, setReminderLeadTime] = useState('1h');
   const [gameReminders, setGameReminders] = useState({});
+  const [startupNotificationEnabled, setStartupNotificationEnabled] = useState(false);
+  const [browserStartupReminders, setBrowserStartupReminders] = useState({});
+  const [customLeadMinsMap, setCustomLeadMinsMap] = useState({});
+  
   const [apiData, setApiData] = useState(null);
   const [allTeamsList, setAllTeamsList] = useState([]);
   const [teamSchedules, setTeamSchedules] = useState([]);
@@ -35,27 +39,26 @@ export default function App() {
   // Load Initial Data & Migration
   useEffect(() => {
     const processLoadedData = (result) => {
-      const activeLeagueData = LEAGUES_FLAT[result.selectedLeague || selectedLeague] || LEAGUES_FLAT.mls;
-      const defaultSlug = activeLeagueData.sportSlug || 'soccer/usa.1';
-
+      const currentSelectedLeague = result.selectedLeague || selectedLeague;
       if (result.trackedTeams) {
-        // Data Migration for legacy MLS teams or missing sportSlugs
-        const migratedTeams = result.trackedTeams.map(t => {
-          if (!t.sportSlug) {
-            return { ...t, sportSlug: defaultSlug };
-          }
-          return t;
-        });
+        const migratedTeams = result.trackedTeams.map(t => ensureTeamSportSlug(t, currentSelectedLeague));
         setTrackedTeams(migratedTeams);
       }
       if (result.reminderLeadTime) setReminderLeadTime(result.reminderLeadTime);
       if (result.gameReminders) setGameReminders(result.gameReminders);
       if (result.selectedSport) setSelectedSport(result.selectedSport);
       if (result.selectedLeague) setSelectedLeague(result.selectedLeague);
+      if (result.startupNotificationEnabled !== undefined) setStartupNotificationEnabled(result.startupNotificationEnabled);
+      if (result.browserStartupReminders) setBrowserStartupReminders(result.browserStartupReminders);
+      if (result.customLeadMinsMap) setCustomLeadMinsMap(result.customLeadMinsMap);
     };
 
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(['trackedTeams', 'reminderLeadTime', 'gameReminders', 'selectedSport', 'selectedLeague'], processLoadedData);
+      chrome.storage.local.get([
+        'trackedTeams', 'reminderLeadTime', 'gameReminders', 
+        'selectedSport', 'selectedLeague', 'startupNotificationEnabled',
+        'browserStartupReminders', 'customLeadMinsMap'
+      ], processLoadedData);
     } else {
       const result = {};
       const mockTeams = localStorage.getItem('trackedTeams');
@@ -68,6 +71,12 @@ export default function App() {
       if (mockSport) result.selectedSport = mockSport;
       const mockLeague = localStorage.getItem('selectedLeague');
       if (mockLeague) result.selectedLeague = mockLeague;
+      const mockStartupNotif = localStorage.getItem('startupNotificationEnabled');
+      if (mockStartupNotif) result.startupNotificationEnabled = JSON.parse(mockStartupNotif);
+      const mockBrowserStartup = localStorage.getItem('browserStartupReminders');
+      if (mockBrowserStartup) result.browserStartupReminders = JSON.parse(mockBrowserStartup);
+      const mockCustomLeads = localStorage.getItem('customLeadMinsMap');
+      if (mockCustomLeads) result.customLeadMinsMap = JSON.parse(mockCustomLeads);
       
       processLoadedData(result);
     }
@@ -79,7 +88,7 @@ export default function App() {
     preloadLeagueSchedules(selectedLeague);
   }, [selectedLeague]);
 
-  // Fetch full schedules for tracked teams whenever trackedTeams or selectedLeague changes
+  // Fetch full schedules for ALL tracked teams across ALL their respective sports/leagues
   useEffect(() => {
     async function loadTrackedSchedules() {
       if (trackedTeams.length === 0) {
@@ -87,12 +96,9 @@ export default function App() {
         return;
       }
       try {
-        const activeLeagueData = LEAGUES_FLAT[selectedLeague] || LEAGUES_FLAT.mls;
-        const defaultSlug = activeLeagueData ? activeLeagueData.sportSlug : 'soccer/usa.1';
-
         const schedulePromises = trackedTeams.map(t => {
-          const slug = t.sportSlug || defaultSlug;
-          return fetchTeamSchedule(slug, t.id);
+          const teamWithSlug = ensureTeamSportSlug(t, selectedLeague);
+          return fetchTeamSchedule(teamWithSlug.sportSlug, teamWithSlug.id);
         });
 
         const results = await Promise.all(schedulePromises);
@@ -109,12 +115,21 @@ export default function App() {
       }
     }
     loadTrackedSchedules();
-  }, [trackedTeams, selectedLeague]);
+  }, [trackedTeams]);
 
-  // Save Tracked Teams, Sport & League selection
+  // Save Tracked Teams, Settings & Reminders
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({ trackedTeams, reminderLeadTime, gameReminders, selectedSport, selectedLeague });
+      chrome.storage.local.set({ 
+        trackedTeams, 
+        reminderLeadTime, 
+        gameReminders, 
+        selectedSport, 
+        selectedLeague,
+        startupNotificationEnabled,
+        browserStartupReminders,
+        customLeadMinsMap
+      });
       if (typeof chrome.runtime !== 'undefined' && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: 'updateAlarms', trackedTeams });
       }
@@ -124,8 +139,11 @@ export default function App() {
       localStorage.setItem('gameReminders', JSON.stringify(gameReminders));
       localStorage.setItem('selectedSport', selectedSport);
       localStorage.setItem('selectedLeague', selectedLeague);
+      localStorage.setItem('startupNotificationEnabled', JSON.stringify(startupNotificationEnabled));
+      localStorage.setItem('browserStartupReminders', JSON.stringify(browserStartupReminders));
+      localStorage.setItem('customLeadMinsMap', JSON.stringify(customLeadMinsMap));
     }
-  }, [trackedTeams, reminderLeadTime, gameReminders, selectedSport, selectedLeague]);
+  }, [trackedTeams, reminderLeadTime, gameReminders, selectedSport, selectedLeague, startupNotificationEnabled, browserStartupReminders, customLeadMinsMap]);
 
   const refreshData = async () => {
     const leagueData = LEAGUES_FLAT[selectedLeague] || LEAGUES_FLAT.mls;
@@ -152,24 +170,28 @@ export default function App() {
   };
 
   const handleToggleTracked = (team) => {
-    const activeLeagueData = LEAGUES_FLAT[selectedLeague] || LEAGUES_FLAT.mls;
-    const defaultSlug = activeLeagueData.sportSlug || 'soccer/usa.1';
-    
-    const teamWithSlug = {
-      ...team,
-      sportSlug: team.sportSlug || defaultSlug
-    };
+    const teamWithSlug = ensureTeamSportSlug(team, selectedLeague);
 
     setTrackedTeams(prev => {
-      if (prev.some(t => t.id === team.id)) {
-        return prev.filter(t => t.id !== team.id);
+      const exists = prev.some(t => 
+        String(t.id) === String(teamWithSlug.id) && 
+        (t.sportSlug && teamWithSlug.sportSlug ? t.sportSlug === teamWithSlug.sportSlug : true)
+      );
+
+      if (exists) {
+        return prev.filter(t => 
+          !(String(t.id) === String(teamWithSlug.id) && 
+            (t.sportSlug && teamWithSlug.sportSlug ? t.sportSlug === teamWithSlug.sportSlug : true))
+        );
       }
       return [...prev, teamWithSlug];
     });
   };
 
-  const handleRemoveTeam = (teamId) => {
-    setTrackedTeams(prev => prev.filter(t => t.id !== teamId));
+  const handleRemoveTeam = (teamId, sportSlug = null) => {
+    setTrackedTeams(prev => prev.filter(t => 
+      !(String(t.id) === String(teamId) && (sportSlug ? t.sportSlug === sportSlug : true))
+    ));
   };
   
   const handleClearTrackedTeams = () => {
@@ -217,6 +239,24 @@ export default function App() {
     });
   };
 
+  const handleToggleStartupReminder = (gameId, enabled) => {
+    setBrowserStartupReminders(prev => ({
+      ...prev,
+      [gameId]: enabled
+    }));
+  };
+
+  const handleAddCustomLeadMin = (gameId, mins) => {
+    setCustomLeadMinsMap(prev => {
+      const current = prev[gameId] || [];
+      if (current.includes(mins)) return prev;
+      return {
+        ...prev,
+        [gameId]: [...current, mins]
+      };
+    });
+  };
+
   const allTeams = allTeamsList;
   
   // Combine scoreboard games + team schedules for tracked teams
@@ -248,7 +288,6 @@ export default function App() {
         selectedSport={selectedSport} 
         onSelectSport={(sportId) => {
           setSelectedSport(sportId);
-          // Default league for selected sport
           const defaultLeagues = { soccer: 'mls', basketball: 'nba', football: 'nfl', hockey: 'nhl', baseball: 'mlb', racing: 'f1', mma: 'ufc', golf: 'pga' };
           setSelectedLeague(defaultLeagues[sportId] || 'mls');
         }} 
@@ -304,6 +343,8 @@ export default function App() {
         <SettingsModal 
           reminderLeadTime={reminderLeadTime} 
           onLeadTimeChange={setReminderLeadTime} 
+          startupNotificationEnabled={startupNotificationEnabled}
+          onStartupNotificationChange={setStartupNotificationEnabled}
           onClearTrackedTeams={handleClearTrackedTeams}
         />
       </Modal>
@@ -337,6 +378,10 @@ export default function App() {
           game={selectedGameForAlarm} 
           activeAlarms={selectedGameForAlarm ? gameReminders[selectedGameForAlarm.id] : []} 
           onToggleAlarm={handleToggleGameAlarm} 
+          isStartupReminderEnabled={selectedGameForAlarm ? !!browserStartupReminders[selectedGameForAlarm.id] : false}
+          onToggleStartupReminder={handleToggleStartupReminder}
+          customLeadMins={selectedGameForAlarm ? (customLeadMinsMap[selectedGameForAlarm.id] || []) : []}
+          onAddCustomLeadMin={handleAddCustomLeadMin}
         />
       </Modal>
     </div>
