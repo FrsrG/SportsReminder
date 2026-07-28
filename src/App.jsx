@@ -12,6 +12,7 @@ import SettingsModal from './components/SettingsModal.jsx';
 import HelpModal from './components/HelpModal.jsx';
 import FullScheduleModal from './components/FullScheduleModal.jsx';
 import GameAlarmModal from './components/GameAlarmModal.jsx';
+import CalendarModal from './components/CalendarModal.jsx';
 
 import { fetchLeagueScoreboard, extractGamesForTeams, fetchTeamSchedule } from './espnApi.js';
 import { loadLeagueTeams, preloadLeagueSchedules, LEAGUES_FLAT } from './leagueManager.js';
@@ -275,7 +276,7 @@ export default function App() {
       />
       
       <QuickActions 
-        onTodaysGames={() => setActiveModal('todays-games')}
+        onCalendar={() => setActiveModal('calendar')}
         onFavorites={() => setActiveModal('favorites')}
         onExportSchedule={() => setActiveModal('export')}
       />
@@ -320,16 +321,15 @@ export default function App() {
         />
       </Modal>
 
-      <Modal isOpen={activeModal === 'todays-games'} title="Today's Games" onClose={() => setActiveModal(null)}>
-        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-          <NextGames 
-            games={upcomingTrackedGames.filter(g => new Date(g.date).toDateString() === new Date().toDateString())} 
-            reminderLeadTime={reminderLeadTime} 
-            gameReminders={gameReminders}
-            onOpenAlarmModal={handleOpenAlarmModal}
-            limit={null}
-          />
-        </div>
+      <Modal isOpen={activeModal === 'calendar'} title="Match Calendar" isWide={true} onClose={() => setActiveModal(null)}>
+        <CalendarModal 
+          allTrackedGames={allTrackedGames}
+          trackedTeams={trackedTeams}
+          selectedSport={selectedSport}
+          selectedLeague={selectedLeague}
+          gameReminders={gameReminders}
+          onOpenAlarmModal={handleOpenAlarmModal}
+        />
       </Modal>
 
       <Modal isOpen={activeModal === 'game-alarm'} title="Set Match Reminders" onClose={() => setActiveModal(null)}>

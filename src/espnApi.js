@@ -1,6 +1,17 @@
 // espnApi.js
 
 /**
+ * Helper to safely extract score string from string, number, or object.
+ */
+export function extractScoreString(scoreVal) {
+  if (scoreVal === null || scoreVal === undefined) return '';
+  if (typeof scoreVal === 'object') {
+    return String(scoreVal.displayValue || scoreVal.value || scoreVal.score || '');
+  }
+  return String(scoreVal);
+}
+
+/**
  * Helper to parse raw ESPN event into normalized Game structure.
  */
 export function parseEventToGame(event, defaultSportSlug = '') {
@@ -47,6 +58,9 @@ export function parseEventToGame(event, defaultSportSlug = '') {
 
   const venueName = competition.venue ? competition.venue.fullName : (event.circuit ? event.circuit.fullName : 'TBD');
 
+  const rawHomeScore = homeTeamComp ? (homeTeamComp.score !== undefined ? homeTeamComp.score : (homeTeamComp.linescores ? homeTeamComp.linescores[homeTeamComp.linescores.length-1]?.value : '')) : '';
+  const rawAwayScore = awayTeamComp ? (awayTeamComp.score !== undefined ? awayTeamComp.score : (awayTeamComp.linescores ? awayTeamComp.linescores[awayTeamComp.linescores.length-1]?.value : '')) : '';
+
   return {
     id: String(event.id),
     date: event.date,
@@ -65,6 +79,8 @@ export function parseEventToGame(event, defaultSportSlug = '') {
     venue: venueName,
     status: statusName,
     completed: isCompleted,
+    homeScore: extractScoreString(rawHomeScore),
+    awayScore: extractScoreString(rawAwayScore),
     sportSlug: defaultSportSlug
   };
 }
@@ -82,11 +98,9 @@ export async function fetchLeagueScoreboard(sportSlug) {
     const startDateStr = `${year}${month}${day}`;
     const endDateStr = `${year}1231`;
 
-    // Try with dates range first (works for Soccer, NFL, NBA, MLB, NHL)
     let url = `https://site.api.espn.com/apis/site/v2/sports/${sportSlug}/scoreboard?limit=1000&dates=${startDateStr}-${endDateStr}`;
     let response = await fetch(url);
 
-    // If HTTP error (e.g. 400 for F1/UFC/Golf or wide dates), retry without dates parameter
     if (!response.ok) {
       url = `https://site.api.espn.com/apis/site/v2/sports/${sportSlug}/scoreboard?limit=1000`;
       response = await fetch(url);
@@ -102,6 +116,40 @@ export async function fetchLeagueScoreboard(sportSlug) {
 }
 
 /**
+ * Fetch scoreboard data for a specific league/sport for an entire target month.
+ */
+export async function fetchLeagueScoreboardForMonth(sportSlug, year, month) {
+  if (!sportSlug) return [];
+  try {
+    const yStr = String(year);
+    const mStr = String(month + 1).padStart(2, '0');
+    
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const lDayStr = String(lastDay).padStart(2, '0');
+
+    const startDateStr = `${yStr}${mStr}01`;
+    const endDateStr = `${yStr}${mStr}${lDayStr}`;
+
+    let url = `https://site.api.espn.com/apis/site/v2/sports/${sportSlug}/scoreboard?limit=1000&dates=${startDateStr}-${endDateStr}`;
+    let response = await fetch(url);
+
+    if (!response.ok) {
+      url = `https://site.api.espn.com/apis/site/v2/sports/${sportSlug}/scoreboard?limit=1000`;
+      response = await fetch(url);
+    }
+
+    if (!response.ok) return [];
+    const data = await response.json();
+    if (!data || !data.events) return [];
+
+    return data.events.map(evt => parseEventToGame(evt, sportSlug)).filter(Boolean);
+  } catch (error) {
+    console.error(`Error fetching monthly scoreboard for ${sportSlug} (${year}-${month + 1}):`, error);
+    return [];
+  }
+}
+
+/**
  * Fetch full schedule for a specific team with multi-season and scoreboard fallbacks.
  */
 export async function fetchTeamSchedule(sportSlug = 'soccer/usa.1', teamId) {
@@ -112,12 +160,10 @@ export async function fetchTeamSchedule(sportSlug = 'soccer/usa.1', teamId) {
   const prevYear = year - 1;
 
   try {
-    // Attempt 1: Standard team schedule URL
     let url = `https://site.api.espn.com/apis/site/v2/sports/${safeSlug}/teams/${teamId}/schedule`;
     let response = await fetch(url);
     let data = response.ok ? await response.json() : null;
 
-    // Attempt 2: Fallback to current year season parameter if 0 events returned
     if (!data || !data.events || data.events.length === 0) {
       const seasonUrl = `https://site.api.espn.com/apis/site/v2/sports/${safeSlug}/teams/${teamId}/schedule?season=${year}`;
       const seasonResp = await fetch(seasonUrl);
@@ -129,7 +175,6 @@ export async function fetchTeamSchedule(sportSlug = 'soccer/usa.1', teamId) {
       }
     }
 
-    // Attempt 3: Fallback to previous year season parameter if still 0 events returned (e.g. European soccer transition)
     if (!data || !data.events || data.events.length === 0) {
       const prevSeasonUrl = `https://site.api.espn.com/apis/site/v2/sports/${safeSlug}/teams/${teamId}/schedule?season=${prevYear}`;
       const prevSeasonResp = await fetch(prevSeasonUrl);
@@ -141,14 +186,13 @@ export async function fetchTeamSchedule(sportSlug = 'soccer/usa.1', teamId) {
       }
     }
 
-    // Attempt 4: Scoreboard fallback (if team schedule endpoint has 0 events or isn't supported)
     if (!data || !data.events || data.events.length === 0) {
       const sbData = await fetchLeagueScoreboard(safeSlug);
       if (sbData && sbData.events) {
         const matchingEvents = sbData.events.filter(evt => {
           if (!evt.competitions || !evt.competitions[0]) return false;
           const comps = evt.competitions[0].competitors;
-          if (!comps || comps.length === 0) return true; // non-team sports match all events in league
+          if (!comps || comps.length === 0) return true;
           return comps.some(c => c.team && String(c.team.id) === String(teamId));
         });
         if (matchingEvents.length > 0) {
@@ -180,7 +224,6 @@ export function extractGamesForTeams(apiData, trackedTeams) {
     const competition = event.competitions[0];
     const competitors = competition.competitors || [];
 
-    // Check if any competitor is in our trackedTeams list, OR if trackedTeams is empty (for overall sports)
     const hasTrackedTeam = competitors.length === 0 || (!trackedTeams || trackedTeams.length === 0) || competitors.some(comp => 
       comp.team && trackedTeams.some(tt => {
         const teamId = typeof tt === 'object' && tt !== null ? tt.id : String(tt);

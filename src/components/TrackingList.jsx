@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 export default function TrackingList({ trackedTeams, onManage, onRemoveTeam }) {
   return (
     <section className="section">
-      <div className="section-header">
+      <div className="section-header flex-between">
         <h2>TRACKING (<span>{trackedTeams.length}</span> TEAMS)</h2>
+        <a href="#" onClick={(e) => { e.preventDefault(); onManage(); }} className="text-secondary-link">Manage</a>
       </div>
       
       <div className="tracked-list">
@@ -16,7 +17,7 @@ export default function TrackingList({ trackedTeams, onManage, onRemoveTeam }) {
             return (
               <div key={team.id} className="team-row">
                 <div className="team-info">
-                  <img src={logoUrl} alt={team.abbreviation} className="team-logo" />
+                  <img src={logoUrl} alt={team.abbreviation || team.name} className="team-logo" />
                   <span className="team-name">{team.name}</span>
                 </div>
                 <div className="team-actions">
@@ -36,7 +37,7 @@ export default function TrackingList({ trackedTeams, onManage, onRemoveTeam }) {
       </div>
 
       <button className="add-team-btn" onClick={onManage}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
         Add Team
       </button>
     </section>
