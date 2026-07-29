@@ -1,6 +1,9 @@
-// background.js
+// background.js - Universal Chromium Browser Compatible Service Worker
 
 const ALARM_NAME = 'check-upcoming-games';
+
+// Cross-browser API accessor (Chrome, Comet, Brave, Edge, Opera, Vivaldi, Firefox)
+const extApi = typeof chrome !== 'undefined' ? chrome : (typeof browser !== 'undefined' ? browser : null);
 
 // Helper to convert lead time string ('15m', '30m', '45m', '1h', '2h') to milliseconds
 function parseLeadTimeMs(leadTimeStr) {
@@ -14,84 +17,170 @@ function parseLeadTimeMs(leadTimeStr) {
   }
 }
 
-// Initialize extension on install
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("Remind Sports Extension Installed");
-  chrome.alarms.create(ALARM_NAME, { periodInMinutes: 15 });
-});
+function getIconUrl() {
+  if (extApi && extApi.runtime && extApi.runtime.getURL) {
+    try {
+      return extApi.runtime.getURL('icon.png');
+    } catch (e) {
+      return 'icon.png';
+    }
+  }
+  return 'icon.png';
+}
 
-// Browser Startup Listener (triggers when user launches browser on game day)
-if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onStartup) {
-  chrome.runtime.onStartup.addListener(() => {
-    console.log("Browser launched. Checking game day startup reminders...");
-    checkBrowserStartupReminders();
+/**
+ * Universal Desktop Notification Dispatcher
+ * Compatible with Google Chrome, Comet, Brave, Edge, Vivaldi, Opera & Firefox WebExtensions.
+ * Uses chrome.notifications with seamless ServiceWorker showNotification fallback.
+ */
+function createUniversalNotification(notifId, title, message) {
+  const iconUrl = getIconUrl();
+
+  // Primary Path: Extension Notification API
+  if (extApi && extApi.notifications && extApi.notifications.create) {
+    try {
+      extApi.notifications.create(notifId, {
+        type: 'basic',
+        iconUrl: iconUrl,
+        title: title,
+        message: message,
+        priority: 2
+      }, (createdId) => {
+        if (extApi.runtime && extApi.runtime.lastError) {
+          console.warn("[Remind Sports] chrome.notifications.create lastError, trying ServiceWorker fallback:", extApi.runtime.lastError);
+          fallbackServiceWorkerNotification(title, message, iconUrl);
+        }
+      });
+      return;
+    } catch (err) {
+      console.warn("[Remind Sports] chrome.notifications.create threw error, resorting to fallback:", err);
+    }
+  }
+
+  // Secondary Fallback: Standard ServiceWorker Registration Notification (HTML5/Web standard)
+  fallbackServiceWorkerNotification(title, message, iconUrl);
+}
+
+function fallbackServiceWorkerNotification(title, message, iconUrl) {
+  if (typeof self !== 'undefined' && self.registration && self.registration.showNotification) {
+    try {
+      self.registration.showNotification(title, {
+        body: message,
+        icon: iconUrl,
+        badge: iconUrl,
+        tag: title
+      });
+    } catch (err) {
+      console.error("[Remind Sports] ServiceWorker showNotification error:", err);
+    }
+  }
+}
+
+// Initialize extension on install / update
+if (extApi && extApi.runtime && extApi.runtime.onInstalled) {
+  extApi.runtime.onInstalled.addListener(() => {
+    console.log("[Remind Sports] Extension Installed / Activated across Chromium engine");
+    if (extApi.alarms) {
+      extApi.alarms.create(ALARM_NAME, { periodInMinutes: 15 });
+    }
+  });
+}
+
+// Service Worker Activation Hook (For Chromium derivatives like Comet)
+if (typeof self !== 'undefined' && self.addEventListener) {
+  self.addEventListener('activate', (event) => {
+    console.log("[Remind Sports] Service worker activated. Running startup check...");
+    checkBrowserStartupReminders(false);
+  });
+}
+
+// Browser Startup Listener (Chrome, Comet, Brave, Edge, Vivaldi)
+if (extApi && extApi.runtime && extApi.runtime.onStartup) {
+  extApi.runtime.onStartup.addListener(() => {
+    console.log("[Remind Sports] Browser onStartup event fired. Checking game day reminders...");
+    checkBrowserStartupReminders(true);
   });
 }
 
 // Listen for messages from popup or dev testing hub
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'updateAlarms') {
-    checkGamesAndSetAlarms(message.trackedTeams);
-    checkBrowserStartupReminders();
-    sendResponse({ status: 'ok' });
-  } else if (message.action === 'checkStartupReminders') {
-    checkBrowserStartupReminders();
-    sendResponse({ status: 'triggered' });
-  } else if (message.action === 'triggerDesktopNotification') {
-    // Direct trigger desktop notification
-    const notifId = `desktop-notif-${Date.now()}`;
-    chrome.notifications.create(notifId, {
-      type: 'basic',
-      iconUrl: 'icon.png',
-      title: message.title || '⚽ Remind Sports Desktop Alert',
-      message: message.message || 'Inter Miami CF vs CF Montréal starts soon!',
-      priority: 2
-    });
-    sendResponse({ status: 'sent', notifId });
-  } else if (message.action === 'setTestAlarm') {
-    // Schedule an immediate or fast-forwarded alarm for testing
-    const alarmId = `test-alarm-${Date.now()}`;
-    const delayMinutes = (message.delaySeconds || 5) / 60;
-    
-    chrome.storage.local.set({
-      [alarmId]: {
-        title: message.matchTitle || 'TEST MATCH: MIA @ MTL',
-        message: `Reminder: Match starts soon at ${message.venue || 'Stade Saputo'}!`
+if (extApi && extApi.runtime && extApi.runtime.onMessage) {
+  extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'updateAlarms') {
+      checkGamesAndSetAlarms(message.trackedTeams);
+      sendResponse({ status: 'ok' });
+    } else if (message.action === 'checkStartupReminders') {
+      checkBrowserStartupReminders(true);
+      sendResponse({ status: 'triggered' });
+    } else if (message.action === 'triggerDesktopNotification') {
+      const notifId = `desktop-notif-${Date.now()}`;
+      createUniversalNotification(
+        notifId,
+        message.title || '⚽ Remind Sports Desktop Alert',
+        message.message || 'Inter Miami CF vs CF Montréal starts soon!'
+      );
+      sendResponse({ status: 'sent', notifId });
+    } else if (message.action === 'setTestAlarm') {
+      const alarmId = `test-alarm-${Date.now()}`;
+      const delayMinutes = (message.delaySeconds || 5) / 60;
+      
+      if (extApi.storage && extApi.storage.local) {
+        extApi.storage.local.set({
+          [alarmId]: {
+            title: message.matchTitle || 'TEST MATCH: MIA @ MTL',
+            message: `Reminder: Match starts soon at ${message.venue || 'Stade Saputo'}!`
+          }
+        });
       }
-    });
-    
-    chrome.alarms.create(alarmId, { delayInMinutes: delayMinutes });
-    sendResponse({ status: 'ok', alarmId, delaySeconds: message.delaySeconds || 5 });
-  } else if (message.action === 'getActiveAlarms') {
-    chrome.alarms.getAll((alarms) => {
-      sendResponse({ alarms });
-    });
-    return true; // async response
-  } else if (message.action === 'clearAllAlarms') {
-    chrome.alarms.clearAll((wasCleared) => {
-      sendResponse({ status: wasCleared ? 'cleared' : 'failed' });
-    });
-    return true;
-  }
-});
+      
+      if (extApi.alarms) {
+        extApi.alarms.create(alarmId, { delayInMinutes: delayMinutes });
+      }
+      sendResponse({ status: 'ok', alarmId, delaySeconds: message.delaySeconds || 5 });
+    } else if (message.action === 'getActiveAlarms') {
+      if (extApi.alarms) {
+        extApi.alarms.getAll((alarms) => {
+          sendResponse({ alarms });
+        });
+        return true; // async response
+      } else {
+        sendResponse({ alarms: [] });
+      }
+    } else if (message.action === 'clearAllAlarms') {
+      if (extApi.alarms) {
+        extApi.alarms.clearAll((wasCleared) => {
+          sendResponse({ status: wasCleared ? 'cleared' : 'failed' });
+        });
+        return true;
+      }
+      sendResponse({ status: 'unsupported' });
+    }
+  });
+}
 
 // Handle recurring alarm & game alarms
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM_NAME) {
-    chrome.storage.local.get(['trackedTeams'], (result) => {
-      if (result.trackedTeams && result.trackedTeams.length > 0) {
-        checkGamesAndSetAlarms(result.trackedTeams);
+if (extApi && extApi.alarms && extApi.alarms.onAlarm) {
+  extApi.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === ALARM_NAME) {
+      if (extApi.storage && extApi.storage.local) {
+        extApi.storage.local.get(['trackedTeams'], (result) => {
+          if (result.trackedTeams && result.trackedTeams.length > 0) {
+            checkGamesAndSetAlarms(result.trackedTeams);
+          }
+          checkBrowserStartupReminders(false);
+        });
       }
-    });
-  } else if (alarm.name.startsWith('game-') || alarm.name.startsWith('test-alarm-')) {
-    triggerNotification(alarm.name);
-  }
-});
+    } else if (alarm.name.startsWith('game-') || alarm.name.startsWith('test-alarm-')) {
+      triggerNotification(alarm.name);
+    }
+  });
+}
 
 async function checkGamesAndSetAlarms(trackedTeams) {
   try {
+    if (!extApi || !extApi.storage || !extApi.storage.local) return;
+
     const storageData = await new Promise(resolve => {
-      chrome.storage.local.get(['gameReminders', 'reminderLeadTime'], resolve);
+      extApi.storage.local.get(['gameReminders', 'reminderLeadTime'], resolve);
     });
     
     const gameReminders = storageData.gameReminders || {};
@@ -102,47 +191,62 @@ async function checkGamesAndSetAlarms(trackedTeams) {
       const reminderSetting = gameReminders[gameId];
       if (!reminderSetting || reminderSetting === 'off') return;
 
-      // Handle array of ISO timestamps (from iOS Alarm Modal)
       if (Array.isArray(reminderSetting)) {
         reminderSetting.forEach(isoTimeStr => {
           const alarmTimeMs = new Date(isoTimeStr).getTime();
-          if (alarmTimeMs > now) {
+          // STRICT FILTER: Only schedule alarms that are strictly in the future (at least 5s ahead)
+          if (alarmTimeMs > (now + 5000)) {
             const alarmId = `game-${gameId}-${alarmTimeMs}`;
             const alarmClockStr = new Date(alarmTimeMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
             
-            chrome.storage.local.set({
+            extApi.storage.local.set({
               [alarmId]: {
                 title: `⏰ Match Reminder (${alarmClockStr})`,
                 message: `Your tracked match is starting soon! Don't miss kick-off/tip-off.`
               }
             });
             
-            chrome.alarms.create(alarmId, { when: alarmTimeMs });
+            if (extApi.alarms) {
+              extApi.alarms.create(alarmId, { when: alarmTimeMs });
+            }
           }
         });
       }
     });
   } catch (error) {
-    console.error("Error checking games in background:", error);
+    console.error("[Remind Sports] Error checking games in background:", error);
   }
 }
 
 /**
  * Checks for game day matches of tracked teams on browser launch and sends time-remaining notifications.
+ * Uses stable Notification IDs to strictly enforce EXACTLY ONE notification per game per day across all Chromium browsers.
  */
-async function checkBrowserStartupReminders() {
+async function checkBrowserStartupReminders(forceRun = false) {
   try {
+    if (!extApi || !extApi.storage || !extApi.storage.local) return;
+
     const result = await new Promise(resolve => {
-      chrome.storage.local.get(['trackedTeams', 'startupNotificationEnabled', 'browserStartupReminders'], resolve);
+      extApi.storage.local.get(['trackedTeams', 'startupNotificationEnabled', 'browserStartupReminders', 'lastStartupCheckTime'], resolve);
     });
 
     const trackedTeams = result.trackedTeams || [];
     const globalEnabled = result.startupNotificationEnabled === true;
     const gameStartupMap = result.browserStartupReminders || {};
+    const lastCheckTime = result.lastStartupCheckTime || 0;
 
     if (trackedTeams.length === 0) return;
 
     const now = new Date();
+    const nowMs = now.getTime();
+
+    // Deduplicate executions within 15 seconds to avoid double-firing on startup
+    if (!forceRun && (nowMs - lastCheckTime < 15000)) {
+      return;
+    }
+
+    extApi.storage.local.set({ lastStartupCheckTime: nowMs });
+
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
@@ -151,8 +255,13 @@ async function checkBrowserStartupReminders() {
 
     const gamesToday = [];
 
-    // Method 1: Fetch today's scoreboard for all tracked sports/leagues with explicit dates parameter
+    // Fetch today's scoreboard for all tracked sports/leagues with explicit dates parameter
     const sportSlugs = Array.from(new Set(trackedTeams.map(t => t.sportSlug || 'soccer/usa.1')));
+    if (trackedTeams.some(t => !t.sportSlug)) {
+      ['soccer/usa.1', 'basketball/nba', 'baseball/mlb', 'hockey/nhl', 'football/nfl'].forEach(s => {
+        if (!sportSlugs.includes(s)) sportSlugs.push(s);
+      });
+    }
 
     for (const slug of sportSlugs) {
       try {
@@ -170,7 +279,11 @@ async function checkBrowserStartupReminders() {
                 const competitors = competition ? competition.competitors : [];
                 
                 const isTracked = competitors.some(c => 
-                  c.team && trackedTeams.some(tt => String(tt.id) === String(c.team.id))
+                  c.team && trackedTeams.some(tt => 
+                    String(tt.id) === String(c.team.id) ||
+                    (tt.name && c.team.displayName && tt.name.toLowerCase().trim() === c.team.displayName.toLowerCase().trim()) ||
+                    (tt.name && c.team.name && tt.name.toLowerCase().includes(c.team.name.toLowerCase()))
+                  )
                 );
 
                 if (isTracked) {
@@ -186,11 +299,11 @@ async function checkBrowserStartupReminders() {
           });
         }
       } catch (err) {
-        console.error(`Error fetching scoreboard for ${slug}:`, err);
+        console.error(`[Remind Sports] Error fetching scoreboard for ${slug}:`, err);
       }
     }
 
-    // Method 2: Fetch individual team schedules for any tracked team not yet found
+    // Fetch individual team schedules for any tracked team not yet found
     for (const team of trackedTeams) {
       const slug = team.sportSlug || 'soccer/usa.1';
       try {
@@ -218,17 +331,22 @@ async function checkBrowserStartupReminders() {
           });
         }
       } catch (err) {
-        console.error(`Error fetching team schedule for ${team.name}:`, err);
+        console.error(`[Remind Sports] Error fetching team schedule for ${team.name}:`, err);
       }
     }
 
-    // Process all games today and trigger notifications
-    gamesToday.forEach(game => {
+    // Deduplicate games by game ID
+    const uniqueGamesMap = new Map();
+    gamesToday.forEach(g => uniqueGamesMap.set(g.id, g));
+    const finalGamesList = Array.from(uniqueGamesMap.values());
+
+    // Process all games today and trigger universal notifications
+    finalGamesList.forEach(game => {
       const isSpecificEnabled = gameStartupMap[game.id] === true;
 
       // Trigger if global setting is enabled OR specific game setting is enabled
       if (globalEnabled || isSpecificEnabled) {
-        const diffMs = game.date.getTime() - now.getTime();
+        const diffMs = game.date.getTime() - nowMs;
         let timeDiffStr = '';
 
         if (diffMs <= 0) {
@@ -248,35 +366,29 @@ async function checkBrowserStartupReminders() {
         }
 
         const matchTimeStr = game.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const notifId = `startup-game-${game.id}-${todayYmd}`;
 
-        chrome.notifications.create(`startup-game-${game.id}-${Date.now()}`, {
-          type: 'basic',
-          iconUrl: 'icon.png',
-          title: `⏰ Game Day Reminder: ${game.name}`,
-          message: `Match starts today at ${matchTimeStr} (${timeDiffStr} remaining)!`,
-          priority: 2
-        });
+        createUniversalNotification(
+          notifId,
+          `⏰ Game Day Alert: ${game.name}`,
+          `Match starts today at ${matchTimeStr} (${timeDiffStr} remaining)!`
+        );
       }
     });
   } catch (err) {
-    console.error("Error checking browser startup reminders:", err);
+    console.error("[Remind Sports] Error checking browser startup reminders:", err);
   }
 }
 
 function triggerNotification(alarmId) {
-  chrome.storage.local.get([alarmId], (result) => {
+  if (!extApi || !extApi.storage || !extApi.storage.local) return;
+
+  extApi.storage.local.get([alarmId], (result) => {
     const gameInfo = result[alarmId];
     const title = gameInfo ? gameInfo.title : 'Remind Sports Game Alert!';
     const message = gameInfo ? gameInfo.message : 'Your tracked game is starting soon!';
     
-    chrome.notifications.create(alarmId, {
-      type: 'basic',
-      iconUrl: 'icon.png',
-      title: title,
-      message: message,
-      priority: 2
-    });
-    
-    chrome.storage.local.remove(alarmId);
+    createUniversalNotification(alarmId, title, message);
+    extApi.storage.local.remove(alarmId);
   });
 }
