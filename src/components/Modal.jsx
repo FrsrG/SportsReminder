@@ -10,7 +10,7 @@ export default function Modal({ isOpen, title, onClose, isWide = false, children
       <div className={`modal-card ${isWide ? 'modal-card-wide' : ''}`}>
         <div className="modal-header">
           <h3>{title}</h3>
-          <button className="modal-close-btn" onClick={onClose}>&times;</button>
+          <button className="modal-close-btn" onClick={onClose}>Done</button>
         </div>
         <div className="modal-body">
           {children}

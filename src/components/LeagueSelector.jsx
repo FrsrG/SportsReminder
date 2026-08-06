@@ -12,7 +12,7 @@ export default function LeagueSelector({ selectedSport = 'soccer', selectedLeagu
       <div className="section-header">
         <h2>LEAGUE</h2>
       </div>
-      <div className="dropdown-selector-wrapper" style={{ position: 'relative' }}>
+      <div className="dropdown-selector-wrapper" style={{ position: 'relative', zIndex: isOpen ? 90 : 1 }}>
         <div 
           className="league-selector" 
           onClick={() => setIsOpen(!isOpen)}
@@ -54,11 +54,11 @@ export default function LeagueSelector({ selectedSport = 'soccer', selectedLeagu
               top: 'calc(100% + 4px)',
               left: 0,
               right: 0,
-              background: 'var(--bg-card)',
+              background: '#2c2c2e',
               border: '1px solid var(--border-color)',
               borderRadius: '12px',
-              zIndex: 50,
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.4)',
+              zIndex: 1000,
+              boxShadow: '0 12px 28px rgba(0, 0, 0, 0.8)',
               overflow: 'hidden'
             }}
           >

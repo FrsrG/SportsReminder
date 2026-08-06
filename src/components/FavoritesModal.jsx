@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
 import { LEAGUES_FLAT } from '../leagueManager.js';
+import CustomTeamModal from './CustomTeamModal.jsx';
 
-export default function FavoritesModal({ allTeams = [], trackedTeams = [], onToggleTracked, selectedLeague = 'mls' }) {
+export default function FavoritesModal({ 
+  allTeams = [], 
+  trackedTeams = [], 
+  onToggleTracked, 
+  selectedLeague = 'mls',
+  selectedSport = 'soccer',
+  onSaveCustomTeam 
+}) {
   const [query, setQuery] = useState('');
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   
   const leagueData = LEAGUES_FLAT[selectedLeague];
   const leagueName = leagueData ? leagueData.name : 'League';
-  const isIndividualSport = selectedLeague === 'ufc' || selectedLeague === 'pga';
+  const isIndividualSport = selectedLeague === 'pga';
 
   const filtered = allTeams.filter(t => {
     const nameMatch = (t.name || '').toLowerCase().includes(query.toLowerCase());
@@ -67,6 +76,7 @@ export default function FavoritesModal({ allTeams = [], trackedTeams = [], onTog
                 <div className="team-info">
                   <img src={logoUrl} alt={team.abbreviation || team.name} className="team-logo" />
                   <span className="team-name">{team.name}</span>
+                  {team.isCustom && <span className="custom-badge" style={{ marginLeft: '6px' }}>Custom</span>}
                 </div>
                 <button className={starClass} onClick={() => onToggleTracked(teamWithSlug)}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill={starFill} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
@@ -75,7 +85,25 @@ export default function FavoritesModal({ allTeams = [], trackedTeams = [], onTog
             );
           })
         )}
+
+        {/* Add Custom Team Button at bottom of search list */}
+        <div style={{ padding: '12px 0 4px 0', borderTop: '0.5px solid var(--border-color)', marginTop: '12px' }}>
+          <button 
+            type="button" 
+            className="add-custom-team-pill-btn"
+            onClick={() => setIsCustomModalOpen(true)}
+          >
+            <span className="plus-icon">＋</span> Add Custom Team Schedule
+          </button>
+        </div>
       </div>
+
+      <CustomTeamModal 
+        isOpen={isCustomModalOpen}
+        onClose={() => setIsCustomModalOpen(false)}
+        onSaveCustomTeam={onSaveCustomTeam}
+        currentSport={selectedSport}
+      />
     </>
   );
 }

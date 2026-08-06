@@ -113,28 +113,41 @@ export default function GameAlarmModal({
   return (
     <div className="game-alarm-modal-container">
       {/* Header with Manage Toggle */}
-      <div className="alarm-modal-header flex-between" style={{ paddingBottom: '10px', marginBottom: '12px' }}>
-        <div style={{ textAlign: 'left' }}>
-          <div className="alarm-modal-teams">
+      <div className="alarm-modal-header flex-between" style={{ paddingBottom: '12px', marginBottom: '16px', alignItems: 'center' }}>
+        <div style={{ textAlign: 'left', flex: 1, paddingRight: '12px' }}>
+          <div className="alarm-modal-teams" style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)', lineHeight: '1.3' }}>
             {game.awayTeam.name} <span style={{ color: 'var(--text-secondary)', fontWeight: '400' }}>@</span> {game.homeTeam.name}
           </div>
-          <div className="alarm-modal-time">
-            {matchTimeStr} &bull; <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '500' }}>{dayStr}</span>
+          <div className="alarm-modal-time" style={{ fontSize: '14px', fontWeight: '400', color: 'var(--accent-blue)', marginTop: '2px' }}>
+            {matchTimeStr} &bull; <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{dayStr}</span>
           </div>
         </div>
 
         <button 
-          className="tab-btn" 
           onClick={() => setIsManaging(!isManaging)}
           style={{ 
-            padding: '6px 12px', 
-            fontSize: '11px', 
-            background: isManaging ? 'linear-gradient(180deg, #3870b2 0%, #204c82 100%)' : 'rgba(255,255,255,0.1)',
-            border: '1px solid #3d628c',
-            color: '#ffffff'
+            padding: '6px 14px', 
+            fontSize: '13px', 
+            fontWeight: '600', 
+            borderRadius: '14px',
+            background: isManaging ? 'var(--accent-blue)' : 'rgba(10, 132, 255, 0.15)',
+            border: 'none',
+            color: isManaging ? '#ffffff' : 'var(--accent-blue)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexShrink: 0,
+            transition: 'all 0.15s ease'
           }}
         >
-          {isManaging ? 'Done' : '⚙️ Manage'}
+          {!isManaging && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          )}
+          <span>{isManaging ? 'Done' : 'Manage'}</span>
         </button>
       </div>
 

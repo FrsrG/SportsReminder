@@ -1,6 +1,7 @@
 // leagueManager.js
 import { fetchTeamSchedule } from './espnApi.js';
 import staticTeams from './staticTeams.json';
+import { DEFAULT_CUSTOM_LOGO } from './utils/customScheduleScraper.js';
 
 export const SUPPORTED_LEAGUES = {
   soccer: [
@@ -37,13 +38,92 @@ export const SUPPORTED_LEAGUES = {
 };
 
 // Flattened lookup map
-export const LEAGUES_FLAT = Object.values(SUPPORTED_LEAGUES).flat().reduce((acc, league) => {
+export let LEAGUES_FLAT = Object.values(SUPPORTED_LEAGUES).flat().reduce((acc, league) => {
   acc[league.id] = league;
   return acc;
 }, {});
 
 // In-memory cache for pre-fetched team schedules
 const teamSchedulesCache = new Map();
+let customTeamsStore = [];
+let customSchedulesStore = [];
+
+/**
+ * Register custom leagues into SUPPORTED_LEAGUES and LEAGUES_FLAT dynamically.
+ */
+export function registerCustomLeague(customLeague) {
+  const sport = customLeague.sportCategory || 'soccer';
+  if (!SUPPORTED_LEAGUES[sport]) {
+    SUPPORTED_LEAGUES[sport] = [];
+  }
+
+  const existing = SUPPORTED_LEAGUES[sport].find(l => l.id === customLeague.id);
+  if (!existing) {
+    const entry = {
+      id: customLeague.id,
+      name: customLeague.name,
+      sportSlug: customLeague.sportSlug,
+      logo: customLeague.logo || DEFAULT_CUSTOM_LOGO,
+      isCustom: true
+    };
+    SUPPORTED_LEAGUES[sport].push(entry);
+    LEAGUES_FLAT[customLeague.id] = entry;
+  }
+}
+
+/**
+ * Load custom teams and custom leagues from storage.
+ */
+export function initCustomData(customTeams = [], customSchedules = []) {
+  customTeamsStore = customTeams;
+  customSchedulesStore = customSchedules;
+
+  // Register custom leagues
+  customTeams.forEach(t => {
+    if (t.leagueId && t.leagueName) {
+      registerCustomLeague({
+        id: t.leagueId,
+        name: t.leagueName,
+        sportSlug: t.sportSlug,
+        sportCategory: t.sportCategory || 'soccer',
+        logo: t.logo
+      });
+    }
+  });
+
+  // Pre-seed schedules into cache
+  customSchedules.forEach(g => {
+    if (g.customTeamId) {
+      const cacheKey = `${g.sportSlug}:${g.customTeamId}`;
+      if (!teamSchedulesCache.has(cacheKey)) {
+        teamSchedulesCache.set(cacheKey, []);
+      }
+      teamSchedulesCache.get(cacheKey).push(g);
+    }
+  });
+}
+
+/**
+ * Add custom team and schedule to local cache.
+ */
+export function addCustomTeamToStore(teamData, gamesData) {
+  registerCustomLeague({
+    id: teamData.leagueId,
+    name: teamData.leagueName,
+    sportSlug: teamData.sportSlug,
+    sportCategory: teamData.sportCategory || 'soccer',
+    logo: teamData.logo
+  });
+
+  customTeamsStore = [...customTeamsStore.filter(t => t.id !== teamData.id), teamData];
+  customSchedulesStore = [...customSchedulesStore.filter(g => g.customTeamId !== teamData.id), ...gamesData];
+
+  // Set in-memory cache
+  const cacheKey = `${teamData.sportSlug}:${teamData.id}`;
+  teamSchedulesCache.set(cacheKey, gamesData);
+
+  return { customTeams: customTeamsStore, customSchedules: customSchedulesStore };
+}
 
 /**
  * Fetch full season schedule for any team in any league.
@@ -55,6 +135,13 @@ export async function fetchTeamScheduleForSport(sportSlug, teamId) {
     return teamSchedulesCache.get(cacheKey);
   }
 
+  // Check custom schedule store
+  const customGames = customSchedulesStore.filter(g => g.customTeamId === teamId || g.sportSlug === sportSlug);
+  if (customGames.length > 0) {
+    teamSchedulesCache.set(cacheKey, customGames);
+    return customGames;
+  }
+
   const parsedGames = await fetchTeamSchedule(sportSlug, teamId);
   if (parsedGames && parsedGames.length > 0) {
     teamSchedulesCache.set(cacheKey, parsedGames);
@@ -63,10 +150,42 @@ export async function fetchTeamScheduleForSport(sportSlug, teamId) {
 }
 
 /**
- * Fetch and parse all teams for a specific league dynamically from ESPN API.
+ * Fetch and parse all teams for a specific league dynamically from ESPN API or Custom Store.
  */
 export async function fetchLeagueTeamsFromESPN(sportSlug) {
   try {
+    // Check if custom league
+    if (sportSlug && sportSlug.includes('/custom-')) {
+      return customTeamsStore.filter(t => t.sportSlug === sportSlug);
+    }
+
+    if (sportSlug === 'mma/ufc') {
+      const url1 = `https://sports.core.api.espn.com/v3/sports/mma/ufc/athletes?limit=1000&page=1`;
+      const url2 = `https://sports.core.api.espn.com/v3/sports/mma/ufc/athletes?limit=1000&page=2`;
+      const [res1, res2] = await Promise.all([fetch(url1), fetch(url2)]);
+      if (!res1.ok || !res2.ok) throw new Error(`HTTP error fetching UFC fighters`);
+      
+      const data1 = await res1.json();
+      const data2 = await res2.json();
+      
+      const items = [...(data1.items || []), ...(data2.items || [])];
+      
+      if (items.length > 0) {
+        const fighters = items.map(athlete => {
+          return {
+            id: athlete.id,
+            name: athlete.fullName || 'TBD',
+            shortName: athlete.shortName || athlete.displayName || athlete.fullName || 'TBD',
+            abbreviation: '',
+            logo: `https://a.espncdn.com/combiner/i?img=/i/headshots/mma/players/full/${athlete.id}.png`,
+            sportSlug: sportSlug
+          };
+        });
+        return fighters.sort((a, b) => a.name.localeCompare(b.name));
+      }
+      return [];
+    }
+
     const url = `https://site.api.espn.com/apis/site/v2/sports/${sportSlug}/teams?limit=1000`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -100,6 +219,17 @@ export function ensureTeamSportSlug(team, defaultLeague = 'mls') {
   if (!team) return team;
   if (team.sportSlug) return team;
 
+  // First pass: match by both ID and Name
+  if (team.name) {
+    const normName = team.name.toLowerCase().trim();
+    for (const [slug, teamsList] of Object.entries(staticTeams)) {
+      if (Array.isArray(teamsList) && teamsList.some(t => String(t.id) === String(team.id) && t.name && t.name.toLowerCase().trim() === normName)) {
+        return { ...team, sportSlug: slug };
+      }
+    }
+  }
+
+  // Second pass: match by ID
   for (const [slug, teamsList] of Object.entries(staticTeams)) {
     if (Array.isArray(teamsList) && teamsList.some(t => String(t.id) === String(team.id))) {
       return { ...team, sportSlug: slug };
@@ -114,6 +244,12 @@ export function ensureTeamSportSlug(team, defaultLeague = 'mls') {
  * Smart loader for teams: Returns static teams instantly, then updates from storage/ESPN API asynchronously.
  */
 export async function loadLeagueTeams(sportSlug) {
+  // If custom league, load from custom store
+  if (sportSlug && sportSlug.includes('/custom-')) {
+    const matchingCustom = customTeamsStore.filter(t => t.sportSlug === sportSlug);
+    return matchingCustom;
+  }
+
   const rawFallback = staticTeams[sportSlug] || [];
   const fallback = rawFallback.map(t => ({ ...t, sportSlug: t.sportSlug || sportSlug }));
   const storageKey = `teams_cache_${sportSlug.replace('/', '_')}`;
@@ -121,14 +257,12 @@ export async function loadLeagueTeams(sportSlug) {
   const mapSlug = (teamsList) => (teamsList || []).map(t => ({ ...t, sportSlug: t.sportSlug || sportSlug }));
 
   return new Promise((resolve) => {
-    // Return static fallback immediately if available to guarantee instant zero-wait UI rendering
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       chrome.storage.local.get([storageKey], async (result) => {
         if (result[storageKey] && result[storageKey].length > 0) {
           resolve(mapSlug(result[storageKey]));
         } else if (fallback.length > 0) {
           resolve(fallback);
-          // Refresh from API in background and store
           fetchLeagueTeamsFromESPN(sportSlug).then(fresh => {
             if (fresh && fresh.length > 0) {
               const mapped = mapSlug(fresh);

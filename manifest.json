@@ -18,7 +18,7 @@
     "notifications"
   ],
   "host_permissions": [
-    "https://site.api.espn.com/*"
+    "<all_urls>"
   ],
   "web_accessible_resources": [
     {
