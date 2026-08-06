@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import FightCardExpander from './FightCardExpander.jsx';
+import F1Nameplate from './F1Nameplate.jsx';
+import { getGrandPrixCountryCode } from '../espnApi.js';
 
 export default function FullScheduleModal({ allTrackedGames, reminderLeadTime, gameReminders = {}, onOpenAlarmModal }) {
   const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'past'
@@ -75,6 +77,54 @@ export default function FullScheduleModal({ allTrackedGames, reminderLeadTime, g
             const activeCount = activeAlarms.length;
             const isOff = activeCount === 0;
             const isCardExpanded = !!expandedCards[game.id];
+
+            // ========== F1 / RACING EVENT CARD ==========
+            const isRacing = game.isRacing || game.sportSlug === 'racing/f1' || game.sportSlug === 'racing';
+
+            if (isRacing) {
+              const eventTitle = game.eventName || (game.homeTeam ? game.homeTeam.name : 'Grand Prix');
+              const countryCode = game.countryCode || getGrandPrixCountryCode(eventTitle, game.venue);
+
+              return (
+                <div key={game.id} className="game-card f1-event-card" style={{ marginBottom: '8px' }}>
+                  <F1Nameplate eventName={eventTitle} countryCode={countryCode} />
+
+                  <div className="f1-event-info" style={{ flex: 1, minWidth: 0, paddingLeft: '10px' }}>
+                    <div className="f1-event-name" style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {eventTitle}
+                    </div>
+                    <div className="f1-event-meta" style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      <span className="game-day" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{dayStr}</span> • <span className="game-time">{timeStr}</span>
+                    </div>
+                    <div className="game-arena" style={{ fontSize: '10px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }}>
+                      {game.venue}
+                    </div>
+                  </div>
+
+                  <div className="f1-card-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {activeTab === 'upcoming' ? (
+                      <div 
+                        className={`game-action ${isOff ? 'off' : ''}`}
+                        onClick={() => onOpenAlarmModal && onOpenAlarmModal(game)}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                        title={isOff ? "Reminder Off (Click to set alarms)" : `${activeCount} Alarm(s) Active (Click to edit)`}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill={isOff ? "none" : "currentColor"} stroke="currentColor" strokeWidth="2">
+                          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                        <span>{isOff ? 'Off' : `${activeCount} Set`}</span>
+                        {!isOff && <span className="bell-badge">{activeCount}</span>}
+                      </div>
+                    ) : (
+                      <div className="status-final-badge" style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.05)', padding: '4px 8px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        🏁 FINAL
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
 
             // ========== UFC EVENT CARD ==========
             if (game.isUFC) {

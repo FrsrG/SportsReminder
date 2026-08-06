@@ -365,13 +365,17 @@ async function checkBrowserStartupReminders(forceRun = false) {
           }
         }
 
-        const matchTimeStr = game.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        const notifId = `startup-game-${game.id}-${todayYmd}`;
+        const isRacing = game.sportSlug === 'racing/f1' || game.sportSlug === 'racing';
+        const isUFC = game.sportSlug === 'mma/ufc';
+        
+        let titleStr = `⏰ Game Day Alert: ${game.name}`;
+        if (isRacing) titleStr = `🏎️ ${game.name}`;
+        else if (isUFC) titleStr = `🥊 ${game.name}`;
 
         createUniversalNotification(
           notifId,
-          `⏰ Game Day Alert: ${game.name}`,
-          `Match starts today at ${matchTimeStr} (${timeDiffStr} remaining)!`
+          titleStr,
+          `Starts today at ${matchTimeStr} (${timeDiffStr} remaining)!`
         );
       }
     });

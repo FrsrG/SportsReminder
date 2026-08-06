@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LEAGUES_FLAT } from '../leagueManager.js';
 import CustomTeamModal from './CustomTeamModal.jsx';
+import { UFC_WEIGHT_CLASSES } from '../data/ufcActiveFighters.js';
 
 export default function FavoritesModal({ 
   allTeams = [], 
@@ -11,52 +12,78 @@ export default function FavoritesModal({
   onSaveCustomTeam 
 }) {
   const [query, setQuery] = useState('');
+  const [selectedWeightClass, setSelectedWeightClass] = useState('All');
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   
   const leagueData = LEAGUES_FLAT[selectedLeague];
   const leagueName = leagueData ? leagueData.name : 'League';
-  const isIndividualSport = selectedLeague === 'pga';
+  const isUFC = selectedLeague === 'ufc' || selectedSport === 'mma';
+  const isPGA = selectedLeague === 'pga' || selectedSport === 'golf';
 
   const filtered = allTeams.filter(t => {
     const nameMatch = (t.name || '').toLowerCase().includes(query.toLowerCase());
     const abbrMatch = (t.abbreviation || '').toLowerCase().includes(query.toLowerCase());
-    return nameMatch || abbrMatch;
+    const weightMatch = !isUFC || selectedWeightClass === 'All' || t.weightClass === selectedWeightClass;
+    return (nameMatch || abbrMatch) && weightMatch;
   });
 
   return (
     <>
-      {!isIndividualSport && (
+      {isUFC && (
+        <div className="ufc-weight-class-tabs" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '8px', scrollbarWidth: 'none' }}>
+          {UFC_WEIGHT_CLASSES.map(wc => (
+            <button
+              key={wc}
+              type="button"
+              className={`weight-tab-btn ${selectedWeightClass === wc ? 'active' : ''}`}
+              onClick={() => setSelectedWeightClass(wc)}
+              style={{
+                fontSize: '11px',
+                fontWeight: selectedWeightClass === wc ? '700' : '500',
+                padding: '5px 10px',
+                borderRadius: '16px',
+                border: selectedWeightClass === wc ? '1px solid var(--accent-green)' : '1px solid var(--border-color)',
+                background: selectedWeightClass === wc ? 'rgba(74, 222, 128, 0.15)' : 'var(--bg-tertiary)',
+                color: selectedWeightClass === wc ? 'var(--accent-green)' : 'var(--text-secondary)',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              {wc}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!isPGA && (
         <input 
           type="text" 
           className="search-input" 
-          placeholder={`Search ${leagueName} teams...`} 
+          placeholder={isUFC ? "Search active UFC fighters..." : `Search ${leagueName} teams...`} 
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       )}
 
-      <div className="modal-team-list" style={{ marginTop: '12px' }}>
-        {isIndividualSport ? (
+      <div className="modal-team-list" style={{ marginTop: '12px', maxHeight: '280px', overflowY: 'auto' }}>
+        {isPGA ? (
           <div className="empty-state" style={{ padding: '24px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: '28px', marginBottom: '8px' }}>
-              {selectedLeague === 'ufc' ? '🥊' : '⛳'}
-            </div>
+            <div style={{ fontSize: '28px', marginBottom: '8px' }}>⛳</div>
             <div style={{ fontWeight: '600', color: '#f8fafc', marginBottom: '6px' }}>
-              {leagueName} Event Tracking Active
+              PGA Tour Event Tracking Active
             </div>
             <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.5' }}>
-              {selectedLeague === 'ufc' 
-                ? 'UFC is an individual combat sport. All upcoming Fight Nights and PPV event cards are automatically tracked in your schedule!' 
-                : 'PGA Tour is an individual golf tournament sport. All upcoming PGA Tournaments are automatically tracked in your schedule!'}
+              PGA Tour is an individual golf tournament sport. All upcoming PGA Tournaments are automatically tracked in your schedule!
             </div>
           </div>
         ) : allTeams.length === 0 ? (
           <div className="empty-state" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
             <div className="spinner" style={{ margin: '0 auto 12px auto', width: '20px', height: '20px', border: '2px solid rgba(74, 222, 128, 0.3)', borderTopColor: '#4ade80', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-            Fetching teams for {leagueName}...
+            Fetching {isUFC ? 'active fighters' : 'teams'} for {leagueName}...
           </div>
         ) : filtered.length === 0 ? (
-          <div className="empty-state">No matching {leagueName} teams found for "{query}".</div>
+          <div className="empty-state">No matching {isUFC ? 'fighters' : 'teams'} found for "{query}".</div>
         ) : (
           filtered.map(team => {
             const currentSlug = team.sportSlug || (leagueData ? leagueData.sportSlug : '');
@@ -64,7 +91,11 @@ export default function FavoritesModal({
             
             const isTracked = trackedTeams.some(t => 
               String(t.id) === String(teamWithSlug.id) && 
-              (t.sportSlug && teamWithSlug.sportSlug ? t.sportSlug === teamWithSlug.sportSlug : true)
+              (
+                t.sportSlug === teamWithSlug.sportSlug ||
+                (t.sportSlug && teamWithSlug.sportSlug && t.sportSlug.startsWith('mma') && teamWithSlug.sportSlug.startsWith('mma')) ||
+                (t.sportSlug && teamWithSlug.sportSlug && t.sportSlug.startsWith('racing') && teamWithSlug.sportSlug.startsWith('racing'))
+              )
             );
             
             const starFill = isTracked ? 'currentColor' : 'none';
@@ -73,9 +104,25 @@ export default function FavoritesModal({
             
             return (
               <div key={`${teamWithSlug.sportSlug || 'team'}-${teamWithSlug.id}`} className="modal-team-item">
-                <div className="team-info">
-                  <img src={logoUrl} alt={team.abbreviation || team.name} className="team-logo" />
-                  <span className="team-name">{team.name}</span>
+                <div className="team-info" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <img 
+                    src={logoUrl} 
+                    alt={team.name} 
+                    className="team-logo" 
+                    style={isUFC ? { width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-color)' } : {}}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none"><rect width="36" height="36" rx="18" fill="%232c2c2e"/><path d="M18 9C14.6863 9 12 11.6863 12 15C12 18.3137 14.6863 21 18 21C21.3137 21 24 18.3137 24 15C24 11.6863 21.3137 9 18 9Z" fill="%23a1a1aa"/><path d="M9 30C9 25.0294 13.0294 21 18 21C22.9706 21 27 25.0294 27 30" fill="%23a1a1aa"/></svg>';
+                    }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span className="team-name" style={{ fontSize: '13px', fontWeight: '600' }}>{team.name}</span>
+                    {isUFC && team.weightClass && (
+                      <span className="weight-class-pill" style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: '500' }}>
+                        {team.weightClass}
+                      </span>
+                    )}
+                  </div>
                   {team.isCustom && <span className="custom-badge" style={{ marginLeft: '6px' }}>Custom</span>}
                 </div>
                 <button className={starClass} onClick={() => onToggleTracked(teamWithSlug)}>

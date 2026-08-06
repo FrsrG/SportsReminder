@@ -180,6 +180,8 @@ export async function fetchTeamScheduleForSport(sportSlug, teamId) {
   return parsedGames;
 }
 
+import { UFC_ACTIVE_FIGHTERS } from './data/ufcActiveFighters.js';
+
 /**
  * Fetch and parse all teams for a specific league dynamically from ESPN API or Custom Store.
  */
@@ -190,31 +192,8 @@ export async function fetchLeagueTeamsFromESPN(sportSlug) {
       return customTeamsStore.filter(t => t.sportSlug === sportSlug);
     }
 
-    if (sportSlug === 'mma/ufc') {
-      const url1 = `https://sports.core.api.espn.com/v3/sports/mma/ufc/athletes?limit=1000&page=1`;
-      const url2 = `https://sports.core.api.espn.com/v3/sports/mma/ufc/athletes?limit=1000&page=2`;
-      const [res1, res2] = await Promise.all([fetch(url1), fetch(url2)]);
-      if (!res1.ok || !res2.ok) throw new Error(`HTTP error fetching UFC fighters`);
-      
-      const data1 = await res1.json();
-      const data2 = await res2.json();
-      
-      const items = [...(data1.items || []), ...(data2.items || [])];
-      
-      if (items.length > 0) {
-        const fighters = items.map(athlete => {
-          return {
-            id: athlete.id,
-            name: athlete.fullName || 'TBD',
-            shortName: athlete.shortName || athlete.displayName || athlete.fullName || 'TBD',
-            abbreviation: '',
-            logo: `https://a.espncdn.com/combiner/i?img=/i/headshots/mma/players/full/${athlete.id}.png`,
-            sportSlug: sportSlug
-          };
-        });
-        return fighters.sort((a, b) => a.name.localeCompare(b.name));
-      }
-      return [];
+    if (sportSlug === 'mma/ufc' || sportSlug === 'mma') {
+      return [...UFC_ACTIVE_FIGHTERS].sort((a, b) => a.name.localeCompare(b.name));
     }
 
     const url = `https://site.api.espn.com/apis/site/v2/sports/${sportSlug}/teams?limit=1000`;
@@ -281,11 +260,15 @@ export async function loadLeagueTeams(sportSlug) {
     return matchingCustom;
   }
 
+  const mapSlug = (teamsList) => (teamsList || []).map(t => ({ ...t, sportSlug: t.sportSlug || sportSlug }));
+
+  if (sportSlug === 'mma/ufc' || sportSlug === 'mma') {
+    return Promise.resolve(mapSlug(UFC_ACTIVE_FIGHTERS));
+  }
+
   const rawFallback = staticTeams[sportSlug] || [];
   const fallback = rawFallback.map(t => ({ ...t, sportSlug: t.sportSlug || sportSlug }));
   const storageKey = `teams_cache_${sportSlug.replace('/', '_')}`;
-  
-  const mapSlug = (teamsList) => (teamsList || []).map(t => ({ ...t, sportSlug: t.sportSlug || sportSlug }));
 
   return new Promise((resolve) => {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {

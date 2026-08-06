@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { SPORTS_LIST } from './SportSelector.jsx';
 import { SUPPORTED_LEAGUES, LEAGUES_FLAT } from '../leagueManager.js';
-import { fetchLeagueScoreboardForMonth, extractScoreString } from '../espnApi.js';
+import { fetchLeagueScoreboardForMonth, extractScoreString, getGrandPrixCountryCode } from '../espnApi.js';
+import F1Nameplate from './F1Nameplate.jsx';
+
+import UFCNameplate, { parseUFCBadgeInfo } from './UFCNameplate.jsx';
 
 function getGameResultInfo(game, trackedTeams = []) {
   if (!game) return { isCompleted: false };
@@ -288,11 +291,21 @@ export default function CalendarModal({
 
               {hasGames && primaryGame && (
                 <div className="mini-game-card">
-                  <div className="mini-logos-row">
-                    <img src={primaryGame.awayTeam.logo} alt={primaryGame.awayTeam.abbreviation} className="mini-logo" />
-                    <span className="mini-vs">@</span>
-                    <img src={primaryGame.homeTeam.logo} alt={primaryGame.homeTeam.abbreviation} className="mini-logo" />
-                  </div>
+                  {(primaryGame.isRacing || primaryGame.sportSlug === 'racing/f1' || primaryGame.sportSlug === 'racing') ? (
+                    <div className="mini-logos-row" style={{ fontSize: '9px', fontWeight: 800, color: '#f97316' }}>
+                      🏎️ {primaryGame.countryCode || getGrandPrixCountryCode(primaryGame.eventName || primaryGame.homeTeam?.name, primaryGame.venue)}
+                    </div>
+                  ) : (primaryGame.isUFC || primaryGame.sportSlug === 'mma/ufc' || primaryGame.sportSlug === 'mma') ? (
+                    <div className="mini-logos-row" style={{ fontSize: '9px', fontWeight: 800, color: '#ef4444' }}>
+                      🥊 {parseUFCBadgeInfo(primaryGame.eventName).code}
+                    </div>
+                  ) : (
+                    <div className="mini-logos-row">
+                      <img src={primaryGame.awayTeam.logo} alt={primaryGame.awayTeam.abbreviation} className="mini-logo" />
+                      <span className="mini-vs">@</span>
+                      <img src={primaryGame.homeTeam.logo} alt={primaryGame.homeTeam.abbreviation} className="mini-logo" />
+                    </div>
+                  )}
                   
                   {resultInfo && resultInfo.isCompleted ? (
                     <div className={`mini-score ${resultInfo.isWin ? 'mini-win' : (resultInfo.isLoss ? 'mini-loss' : '')}`}>
@@ -339,6 +352,74 @@ export default function CalendarModal({
               const activeCount = activeAlarms.length;
               const isOff = activeCount === 0;
               const resInfo = getGameResultInfo(game, trackedTeams);
+
+              const isRacing = game.isRacing || game.sportSlug === 'racing/f1' || game.sportSlug === 'racing';
+              const isUFC = game.isUFC || game.sportSlug === 'mma/ufc' || game.sportSlug === 'mma';
+
+              if (isRacing) {
+                const eventTitle = game.eventName || (game.homeTeam ? game.homeTeam.name : 'Grand Prix');
+                const countryCode = game.countryCode || getGrandPrixCountryCode(eventTitle, game.venue);
+
+                return (
+                  <div key={game.id} className="game-card f1-event-card" style={{ marginBottom: '6px', padding: '8px 12px' }}>
+                    <F1Nameplate eventName={eventTitle} countryCode={countryCode} />
+                    <div className="f1-event-info" style={{ flex: 1, minWidth: 0, paddingLeft: '8px' }}>
+                      <div className="f1-event-name" style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {eventTitle}
+                      </div>
+                      <div className="game-arena" style={{ fontSize: '9px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {game.venue}
+                      </div>
+                    </div>
+                    <div className="game-info" style={{ textAlign: 'right', minWidth: '60px' }}>
+                      <span className="game-time" style={{ fontSize: '11px', fontWeight: 700 }}>{timeStr}</span>
+                    </div>
+                    <div 
+                      className={`game-action ${isOff ? 'off' : ''}`}
+                      onClick={() => onOpenAlarmModal && onOpenAlarmModal(game)}
+                      style={{ cursor: 'pointer', userSelect: 'none', padding: '4px 8px', fontSize: '10px' }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill={isOff ? "none" : "currentColor"} stroke="currentColor" strokeWidth="2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                      </svg>
+                      <span>{isOff ? 'Off' : `${activeCount}`}</span>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (isUFC) {
+                const eventTitle = game.eventName || 'UFC Event';
+
+                return (
+                  <div key={game.id} className="game-card ufc-event-card" style={{ marginBottom: '6px', padding: '8px 12px' }}>
+                    <UFCNameplate eventName={eventTitle} />
+                    <div className="ufc-event-info" style={{ flex: 1, minWidth: 0, paddingLeft: '8px' }}>
+                      <div className="ufc-event-name" style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {eventTitle}
+                      </div>
+                      <div className="game-arena" style={{ fontSize: '9px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {game.venue}
+                      </div>
+                    </div>
+                    <div className="game-info" style={{ textAlign: 'right', minWidth: '60px' }}>
+                      <span className="game-time" style={{ fontSize: '11px', fontWeight: 700 }}>{timeStr}</span>
+                    </div>
+                    <div 
+                      className={`game-action ${isOff ? 'off' : ''}`}
+                      onClick={() => onOpenAlarmModal && onOpenAlarmModal(game)}
+                      style={{ cursor: 'pointer', userSelect: 'none', padding: '4px 8px', fontSize: '10px' }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill={isOff ? "none" : "currentColor"} stroke="currentColor" strokeWidth="2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                      </svg>
+                      <span>{isOff ? 'Off' : `${activeCount}`}</span>
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div key={game.id} className="game-card" style={{ marginBottom: '6px', padding: '8px 12px' }}>

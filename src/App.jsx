@@ -210,12 +210,20 @@ export default function App() {
   const handleToggleTracked = (team) => {
     const isTracked = trackedTeams.some(t => 
       String(t.id) === String(team.id) && 
-      (t.sportSlug && team.sportSlug ? t.sportSlug === team.sportSlug : true)
+      (
+        t.sportSlug === team.sportSlug ||
+        (t.sportSlug && team.sportSlug && t.sportSlug.startsWith('mma') && team.sportSlug.startsWith('mma')) ||
+        (t.sportSlug && team.sportSlug && t.sportSlug.startsWith('racing') && team.sportSlug.startsWith('racing'))
+      )
     );
 
     if (isTracked) {
       setTrackedTeams(trackedTeams.filter(t => 
-        !(String(t.id) === String(team.id) && (t.sportSlug && team.sportSlug ? t.sportSlug === team.sportSlug : true))
+        !(String(t.id) === String(team.id) && (
+          t.sportSlug === team.sportSlug ||
+          (t.sportSlug && team.sportSlug && t.sportSlug.startsWith('mma') && team.sportSlug.startsWith('mma')) ||
+          (t.sportSlug && team.sportSlug && t.sportSlug.startsWith('racing') && team.sportSlug.startsWith('racing'))
+        ))
       ));
     } else {
       setTrackedTeams([...trackedTeams, team]);
@@ -295,7 +303,7 @@ export default function App() {
   };
 
   const handleRemoveTeam = (teamId) => {
-    setTrackedTeams(trackedTeams.filter(t => t.id !== teamId));
+    setTrackedTeams(trackedTeams.filter(t => String(t.id) !== String(teamId)));
   };
 
   const handleClearTrackedTeams = () => {
@@ -352,9 +360,27 @@ export default function App() {
 
   const allTrackedGames = Array.from(allTrackedGamesMap.values()).sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  // Upcoming games filter
+  // Upcoming games filter (includes live/ongoing events within 3.5 hour window)
   const now = new Date();
-  const upcomingTrackedGames = allTrackedGames.filter(g => new Date(g.date) >= now);
+  const upcomingTrackedGames = allTrackedGames.filter(g => {
+    const isCompleted = g.completed || g.status === 'STATUS_FULL_TIME' || g.status === 'STATUS_FINAL';
+    const matchEndTimeMs = new Date(g.date).getTime() + (3.5 * 60 * 60 * 1000);
+    const isUpcoming = !isCompleted && matchEndTimeMs >= now.getTime();
+
+    // For non-team sports (Racing, UFC, Golf), filter strictly to active sport events
+    const isNonTeamSport = selectedSport === 'racing' || selectedSport === 'mma' || selectedSport === 'golf';
+    if (isNonTeamSport) {
+      if (selectedSport === 'racing') {
+        return isUpcoming && (g.isRacing || g.sportSlug === 'racing/f1' || g.sportSlug === 'racing') && !g.isUFC;
+      }
+      if (selectedSport === 'mma') {
+        return isUpcoming && (g.isUFC || g.sportSlug === 'mma/ufc' || g.sportSlug === 'mma') && !g.isRacing;
+      }
+      return isUpcoming && (g.sportSlug === currentSportSlug);
+    }
+
+    return isUpcoming;
+  });
 
   const allTeams = allTeamsList.length > 0 ? allTeamsList : [];
 
@@ -399,6 +425,7 @@ export default function App() {
       
       <NextGames 
         games={upcomingTrackedGames} 
+        trackedTeams={trackedTeams}
         onViewFullSchedule={() => setActiveModal('full-schedule')}
         reminderLeadTime={reminderLeadTime}
         gameReminders={gameReminders}

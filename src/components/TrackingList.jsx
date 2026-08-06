@@ -18,7 +18,15 @@ export default function TrackingList({ trackedTeams, onManage, onAddTeam, onRemo
             return (
               <div key={`${team.sportSlug || 'team'}-${team.id}`} className="team-row">
                 <div className="team-info">
-                  <img src={logoUrl} alt={team.abbreviation || team.name} className="team-logo" />
+                  <img 
+                    src={logoUrl} 
+                    alt={team.abbreviation || team.name} 
+                    className="team-logo" 
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none"><rect width="36" height="36" rx="18" fill="%232c2c2e"/><path d="M18 9C14.6863 9 12 11.6863 12 15C12 18.3137 14.6863 21 18 21C21.3137 21 24 18.3137 24 15C24 11.6863 21.3137 9 18 9Z" fill="%23a1a1aa"/><path d="M9 30C9 25.0294 13.0294 21 18 21C22.9706 21 27 25.0294 27 30" fill="%23a1a1aa"/></svg>';
+                    }}
+                  />
                   <span className="team-name">{team.name}</span>
                 </div>
                 <div className="team-actions">
