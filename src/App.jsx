@@ -13,9 +13,14 @@ import HelpModal from './components/HelpModal.jsx';
 import FullScheduleModal from './components/FullScheduleModal.jsx';
 import GameAlarmModal from './components/GameAlarmModal.jsx';
 import CalendarModal from './components/CalendarModal.jsx';
+import ManageLeaguesModal from './components/ManageLeaguesModal.jsx';
+import { SPORTS_LIST } from './components/SportSelector.jsx';
 
 import { fetchLeagueScoreboard, extractGamesForTeams, fetchTeamSchedule } from './espnApi.js';
-import { loadLeagueTeams, preloadLeagueSchedules, LEAGUES_FLAT, ensureTeamSportSlug, initCustomData, addCustomTeamToStore } from './leagueManager.js';
+import { 
+  loadLeagueTeams, preloadLeagueSchedules, LEAGUES_FLAT, SUPPORTED_LEAGUES, 
+  ensureTeamSportSlug, initCustomData, addCustomTeamToStore, updateCustomTeamInStore, deleteCustomTeamFromStore 
+} from './leagueManager.js';
 
 export default function App() {
   const [selectedSport, setSelectedSport] = useState('soccer');
@@ -28,6 +33,7 @@ export default function App() {
   const [customLeadMinsMap, setCustomLeadMinsMap] = useState({});
   const [customTeams, setCustomTeams] = useState([]);
   const [customSchedules, setCustomSchedules] = useState([]);
+  const [hiddenLeagues, setHiddenLeagues] = useState([]);
   
   const [apiData, setApiData] = useState(null);
   const [allTeamsList, setAllTeamsList] = useState([]);
@@ -49,8 +55,17 @@ export default function App() {
       setCustomSchedules(loadedCustomSchedules);
       initCustomData(loadedCustomTeams, loadedCustomSchedules);
 
+      const currentHidden = result.hiddenLeagues || [];
+
       if (result.trackedTeams) {
-        const migratedTeams = result.trackedTeams.map(t => ensureTeamSportSlug(t, currentSelectedLeague));
+        const migratedTeams = result.trackedTeams
+          .map(t => ensureTeamSportSlug(t, currentSelectedLeague))
+          .filter(t => {
+            if (t.leagueId && currentHidden.includes(t.leagueId)) return false;
+            const targetLeague = Object.values(LEAGUES_FLAT).find(l => l.sportSlug === t.sportSlug);
+            if (targetLeague && currentHidden.includes(targetLeague.id)) return false;
+            return true;
+          });
         setTrackedTeams(migratedTeams);
       }
       if (result.reminderLeadTime) setReminderLeadTime(result.reminderLeadTime);
@@ -60,13 +75,14 @@ export default function App() {
       if (result.startupNotificationEnabled !== undefined) setStartupNotificationEnabled(result.startupNotificationEnabled);
       if (result.browserStartupReminders) setBrowserStartupReminders(result.browserStartupReminders);
       if (result.customLeadMinsMap) setCustomLeadMinsMap(result.customLeadMinsMap);
+      if (result.hiddenLeagues) setHiddenLeagues(result.hiddenLeagues);
     };
 
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       chrome.storage.local.get([
         'trackedTeams', 'reminderLeadTime', 'gameReminders', 
         'selectedSport', 'selectedLeague', 'startupNotificationEnabled',
-        'browserStartupReminders', 'customLeadMinsMap', 'customTeams', 'customSchedules'
+        'browserStartupReminders', 'customLeadMinsMap', 'customTeams', 'customSchedules', 'hiddenLeagues'
       ], processLoadedData);
     } else {
       const result = {};
@@ -90,6 +106,8 @@ export default function App() {
       if (mockCTeams) result.customTeams = JSON.parse(mockCTeams);
       const mockCScheds = localStorage.getItem('customSchedules');
       if (mockCScheds) result.customSchedules = JSON.parse(mockCScheds);
+      const mockHidden = localStorage.getItem('hiddenLeagues');
+      if (mockHidden) result.hiddenLeagues = JSON.parse(mockHidden);
       
       processLoadedData(result);
     }
@@ -147,7 +165,8 @@ export default function App() {
         browserStartupReminders,
         customLeadMinsMap,
         customTeams,
-        customSchedules
+        customSchedules,
+        hiddenLeagues
       });
       if (typeof chrome.runtime !== 'undefined' && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: 'updateAlarms', trackedTeams });
@@ -156,15 +175,16 @@ export default function App() {
       localStorage.setItem('trackedTeams', JSON.stringify(trackedTeams));
       localStorage.setItem('reminderLeadTime', reminderLeadTime);
       localStorage.setItem('gameReminders', JSON.stringify(gameReminders));
-      localStorage.setItem('selectedSport', selectedSport);
-      localStorage.setItem('selectedLeague', selectedLeague);
+      localStorage.setItem('selectedSport', JSON.stringify(selectedSport));
+      localStorage.setItem('selectedLeague', JSON.stringify(selectedLeague));
       localStorage.setItem('startupNotificationEnabled', JSON.stringify(startupNotificationEnabled));
       localStorage.setItem('browserStartupReminders', JSON.stringify(browserStartupReminders));
       localStorage.setItem('customLeadMinsMap', JSON.stringify(customLeadMinsMap));
       localStorage.setItem('customTeams', JSON.stringify(customTeams));
       localStorage.setItem('customSchedules', JSON.stringify(customSchedules));
+      localStorage.setItem('hiddenLeagues', JSON.stringify(hiddenLeagues));
     }
-  }, [trackedTeams, reminderLeadTime, gameReminders, selectedSport, selectedLeague, startupNotificationEnabled, browserStartupReminders, customLeadMinsMap, customTeams, customSchedules]);
+  }, [trackedTeams, reminderLeadTime, gameReminders, selectedSport, selectedLeague, startupNotificationEnabled, browserStartupReminders, customLeadMinsMap, customTeams, customSchedules, hiddenLeagues]);
 
   const refreshData = async () => {
     const leagueData = LEAGUES_FLAT[selectedLeague] || LEAGUES_FLAT.mls;
@@ -215,6 +235,63 @@ export default function App() {
     // Switch to the newly created custom league and sport
     if (teamData.sportCategory) setSelectedSport(teamData.sportCategory);
     if (teamData.leagueId) setSelectedLeague(teamData.leagueId);
+  };
+
+  const handleToggleHideLeague = (leagueId, sportCategory) => {
+    setHiddenLeagues(prev => {
+      const isHidden = prev.includes(leagueId);
+      const nextHidden = isHidden ? prev.filter(id => id !== leagueId) : [...prev, leagueId];
+
+      // Immediately untrack teams belonging to the newly hidden league
+      if (!isHidden) {
+        const targetLeague = LEAGUES_FLAT[leagueId];
+        setTrackedTeams(currentTracked => currentTracked.filter(t => {
+          if (t.leagueId && t.leagueId === leagueId) return false;
+          if (targetLeague && targetLeague.sportSlug && t.sportSlug && t.sportSlug === targetLeague.sportSlug) return false;
+          return true;
+        }));
+      }
+
+      // Check if currently active league is being hidden
+      if (!isHidden && selectedLeague === leagueId) {
+        const rawLeagues = SUPPORTED_LEAGUES[sportCategory] || [];
+        const visibleInSport = rawLeagues.filter(l => !nextHidden.includes(l.id));
+
+        if (visibleInSport.length > 0) {
+          setSelectedLeague(visibleInSport[0].id);
+        } else {
+          // Find a sport with at least 1 visible league
+          const otherSports = SPORTS_LIST.filter(s => s.id !== sportCategory);
+          const candidates = [];
+          otherSports.forEach(s => {
+            const leagues = SUPPORTED_LEAGUES[s.id] || [];
+            const vis = leagues.filter(l => !nextHidden.includes(l.id));
+            if (vis.length > 0) candidates.push({ sport: s.id, league: vis[0].id });
+          });
+
+          if (candidates.length > 0) {
+            const randomChoice = candidates[Math.floor(Math.random() * candidates.length)];
+            setSelectedSport(randomChoice.sport);
+            setSelectedLeague(randomChoice.league);
+          }
+        }
+      }
+      return nextHidden;
+    });
+  };
+
+  const handleUpdateCustomTeam = (updatedTeam, newGames) => {
+    const { customTeams: updatedTeams, customSchedules: updatedSchedules } = updateCustomTeamInStore(updatedTeam, newGames);
+    setCustomTeams(updatedTeams);
+    setCustomSchedules(updatedSchedules);
+    setTrackedTeams(prev => prev.map(t => t.id === updatedTeam.id ? { ...t, ...updatedTeam } : t));
+  };
+
+  const handleDeleteCustomTeam = (teamId) => {
+    const { customTeams: updatedTeams, customSchedules: updatedSchedules } = deleteCustomTeamFromStore(teamId);
+    setCustomTeams(updatedTeams);
+    setCustomSchedules(updatedSchedules);
+    setTrackedTeams(prev => prev.filter(t => t.id !== teamId));
   };
 
   const handleRemoveTeam = (teamId) => {
@@ -290,22 +367,33 @@ export default function App() {
       
       <SportSelector 
         selectedSport={selectedSport} 
+        hiddenLeagues={hiddenLeagues}
         onSelectSport={(sportId) => {
           setSelectedSport(sportId);
           const defaultLeagues = { soccer: 'mls', basketball: 'nba', football: 'nfl', hockey: 'nhl', baseball: 'mlb', racing: 'f1', mma: 'ufc', golf: 'pga' };
-          setSelectedLeague(defaultLeagues[sportId] || 'mls');
+          const defaultLeague = defaultLeagues[sportId] || 'mls';
+          const rawLeagues = SUPPORTED_LEAGUES[sportId] || [];
+          const visibleLeagues = rawLeagues.filter(l => !hiddenLeagues.includes(l.id));
+          
+          if (hiddenLeagues.includes(defaultLeague) && visibleLeagues.length > 0) {
+            setSelectedLeague(visibleLeagues[0].id);
+          } else {
+            setSelectedLeague(defaultLeague);
+          }
         }} 
       />
       
       <LeagueSelector 
         selectedSport={selectedSport} 
         selectedLeague={selectedLeague} 
+        hiddenLeagues={hiddenLeagues}
         onSelectLeague={setSelectedLeague} 
+        onManage={() => setActiveModal('manage-leagues')}
       />
       
       <TrackingList 
         trackedTeams={trackedTeams}
-        onManage={() => setActiveModal('favorites')}
+        onAddTeam={() => setActiveModal('favorites')}
         onRemoveTeam={handleRemoveTeam}
       />
       
@@ -335,6 +423,18 @@ export default function App() {
       </footer>
 
       {/* Modals */}
+      <Modal isOpen={activeModal === 'manage-leagues'} title="Manage Leagues & Custom Teams" isWide={true} onClose={() => setActiveModal(null)}>
+        <ManageLeaguesModal
+          selectedSport={selectedSport}
+          selectedLeague={selectedLeague}
+          hiddenLeagues={hiddenLeagues}
+          onToggleHideLeague={handleToggleHideLeague}
+          customTeams={customTeams}
+          onUpdateCustomTeam={handleUpdateCustomTeam}
+          onDeleteCustomTeam={handleDeleteCustomTeam}
+        />
+      </Modal>
+
       <Modal isOpen={activeModal === 'favorites'} title={`${LEAGUES_FLAT[selectedLeague]?.name || ''} Favorites & Tracking`} onClose={() => setActiveModal(null)}>
         <FavoritesModal 
           allTeams={allTeams} 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SUPPORTED_LEAGUES } from '../leagueManager.js';
 
 export const SPORTS_LIST = [
   { id: 'soccer', name: 'Soccer', icon: '⚽' },
@@ -11,10 +12,18 @@ export const SPORTS_LIST = [
   { id: 'golf', name: 'Golf', icon: '⛳' }
 ];
 
-export default function SportSelector({ selectedSport, onSelectSport }) {
+export default function SportSelector({ selectedSport, hiddenLeagues = [], onSelectSport }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const currentSport = SPORTS_LIST.find(s => s.id === selectedSport) || SPORTS_LIST[0];
+  // A sport is visible if at least ONE of its leagues is NOT hidden
+  const availableSports = SPORTS_LIST.filter(sport => {
+    const leagues = SUPPORTED_LEAGUES[sport.id] || [];
+    if (leagues.length === 0) return true;
+    return leagues.some(l => !hiddenLeagues.includes(l.id));
+  });
+
+  const displaySports = availableSports.length > 0 ? availableSports : SPORTS_LIST;
+  const currentSport = displaySports.find(s => s.id === selectedSport) || displaySports[0];
 
   return (
     <section className="section">
@@ -28,8 +37,8 @@ export default function SportSelector({ selectedSport, onSelectSport }) {
           style={{ cursor: 'pointer', userSelect: 'none' }}
         >
           <div className="league-info">
-            <span style={{ fontSize: '20px', lineHeight: 1 }}>{currentSport.icon}</span>
-            <span className="league-name">{currentSport.name}</span>
+            <span style={{ fontSize: '20px', lineHeight: 1 }}>{currentSport ? currentSport.icon : '🏆'}</span>
+            <span className="league-name">{currentSport ? currentSport.name : 'Select Sport'}</span>
           </div>
           <svg 
             className="chevron" 
@@ -63,7 +72,7 @@ export default function SportSelector({ selectedSport, onSelectSport }) {
               overflow: 'hidden'
             }}
           >
-            {SPORTS_LIST.map(sport => (
+            {displaySports.map(sport => (
               <div
                 key={sport.id}
                 onClick={() => {
@@ -76,13 +85,13 @@ export default function SportSelector({ selectedSport, onSelectSport }) {
                   gap: '12px',
                   padding: '12px 16px',
                   cursor: 'pointer',
-                  background: sport.id === currentSport.id ? 'var(--bg-hover)' : 'transparent',
-                  color: sport.id === currentSport.id ? 'var(--accent-green)' : 'var(--text-primary)',
-                  fontWeight: sport.id === currentSport.id ? '600' : '400',
+                  background: sport.id === currentSport?.id ? 'var(--bg-hover)' : 'transparent',
+                  color: sport.id === currentSport?.id ? 'var(--accent-green)' : 'var(--text-primary)',
+                  fontWeight: sport.id === currentSport?.id ? '600' : '400',
                   borderBottom: '1px solid var(--border-color)'
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = sport.id === currentSport.id ? 'var(--bg-hover)' : 'transparent'}
+                onMouseLeave={(e) => e.currentTarget.style.background = sport.id === currentSport?.id ? 'var(--bg-hover)' : 'transparent'}
               >
                 <span style={{ fontSize: '18px' }}>{sport.icon}</span>
                 <span>{sport.name}</span>

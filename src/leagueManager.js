@@ -126,6 +126,37 @@ export function addCustomTeamToStore(teamData, gamesData) {
 }
 
 /**
+ * Update custom team metadata and schedule in local cache.
+ */
+export function updateCustomTeamInStore(updatedTeam, newGames) {
+  customTeamsStore = customTeamsStore.map(t => t.id === updatedTeam.id ? updatedTeam : t);
+
+  // Update dynamic league name if registered
+  if (updatedTeam.leagueId && LEAGUES_FLAT[updatedTeam.leagueId]) {
+    LEAGUES_FLAT[updatedTeam.leagueId].name = updatedTeam.leagueName || updatedTeam.name;
+    LEAGUES_FLAT[updatedTeam.leagueId].logo = updatedTeam.logo;
+  }
+
+  if (newGames && Array.isArray(newGames)) {
+    customSchedulesStore = [...customSchedulesStore.filter(g => g.customTeamId !== updatedTeam.id), ...newGames];
+    const cacheKey = `${updatedTeam.sportSlug}:${updatedTeam.id}`;
+    teamSchedulesCache.set(cacheKey, newGames);
+  }
+
+  return { customTeams: customTeamsStore, customSchedules: customSchedulesStore };
+}
+
+/**
+ * Delete custom team and its schedule from local cache.
+ */
+export function deleteCustomTeamFromStore(teamId) {
+  customTeamsStore = customTeamsStore.filter(t => t.id !== teamId);
+  customSchedulesStore = customSchedulesStore.filter(g => g.customTeamId !== teamId);
+
+  return { customTeams: customTeamsStore, customSchedules: customSchedulesStore };
+}
+
+/**
  * Fetch full season schedule for any team in any league.
  */
 export async function fetchTeamScheduleForSport(sportSlug, teamId) {
