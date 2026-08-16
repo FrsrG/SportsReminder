@@ -47,8 +47,18 @@ function createUniversalNotification(notifId, title, message) {
         priority: 2
       }, (createdId) => {
         if (extApi.runtime && extApi.runtime.lastError) {
-          console.warn("[Remind Sports] chrome.notifications.create lastError, trying ServiceWorker fallback:", extApi.runtime.lastError);
-          fallbackServiceWorkerNotification(title, message, iconUrl);
+          console.warn("[Remind Sports] chrome.notifications.create lastError, trying fallback without icon:", extApi.runtime.lastError);
+          try {
+            extApi.notifications.create(`${notifId}-noicon`, {
+              type: 'basic',
+              iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+              title: title,
+              message: message,
+              priority: 2
+            });
+          } catch(e) {
+            fallbackServiceWorkerNotification(title, message, iconUrl);
+          }
         }
       });
       return;
@@ -107,6 +117,7 @@ if (extApi && extApi.runtime && extApi.runtime.onMessage) {
   extApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'updateAlarms') {
       checkGamesAndSetAlarms(message.trackedTeams);
+      checkBrowserStartupReminders(true);
       sendResponse({ status: 'ok' });
     } else if (message.action === 'checkStartupReminders') {
       checkBrowserStartupReminders(true);
@@ -247,15 +258,25 @@ async function checkBrowserStartupReminders(forceRun = false) {
 
     extApi.storage.local.set({ lastStartupCheckTime: nowMs });
 
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
     const todayYmd = `${yyyy}${mm}${dd}`;
+
+    const tYyyy = tomorrow.getFullYear();
+    const tMm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const tDd = String(tomorrow.getDate()).padStart(2, '0');
+    const tomorrowYmd = `${tYyyy}${tMm}${tDd}`;
+
+    const dateRangeStr = `${todayYmd}-${tomorrowYmd}`;
     const todayStr = now.toDateString();
 
     const gamesToday = [];
 
-    // Fetch today's scoreboard for all tracked sports/leagues with explicit dates parameter
+    // Fetch today's scoreboard for all tracked sports/leagues with explicit dates parameter (including evening UTC overlap)
     const sportSlugs = Array.from(new Set(trackedTeams.map(t => t.sportSlug || 'soccer/usa.1')));
     if (trackedTeams.some(t => !t.sportSlug)) {
       ['soccer/usa.1', 'basketball/nba', 'baseball/mlb', 'hockey/nhl', 'football/nfl'].forEach(s => {
@@ -265,7 +286,7 @@ async function checkBrowserStartupReminders(forceRun = false) {
 
     for (const slug of sportSlugs) {
       try {
-        const url = `https://site.api.espn.com/apis/site/v2/sports/${slug}/scoreboard?limit=1000&dates=${todayYmd}`;
+        const url = `https://site.api.espn.com/apis/site/v2/sports/${slug}/scoreboard?limit=1000&dates=${dateRangeStr}`;
         const resp = await fetch(url);
         if (!resp.ok) continue;
         const data = await resp.json();
@@ -342,7 +363,7 @@ async function checkBrowserStartupReminders(forceRun = false) {
 
     // Process all games today and trigger universal notifications
     finalGamesList.forEach(game => {
-      const isSpecificEnabled = gameStartupMap[game.id] === true;
+      const isSpecificEnabled = gameStartupMap[game.id] === true || gameStartupMap[String(game.id)] === true;
 
       // Trigger if global setting is enabled OR specific game setting is enabled
       if (globalEnabled || isSpecificEnabled) {
@@ -372,10 +393,13 @@ async function checkBrowserStartupReminders(forceRun = false) {
         if (isRacing) titleStr = `🏎️ ${game.name}`;
         else if (isUFC) titleStr = `🥊 ${game.name}`;
 
+        const matchTimeStr = game.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const notifId = `startup-game-${game.id}-${todayYmd}`;
+
         createUniversalNotification(
           notifId,
           titleStr,
-          `Starts today at ${matchTimeStr} (${timeDiffStr} remaining)!`
+          `Starts today at ${matchTimeStr} (${timeDiffStr})!`
         );
       }
     });

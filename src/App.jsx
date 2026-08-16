@@ -111,6 +111,15 @@ export default function App() {
       
       processLoadedData(result);
     }
+
+    // Auto-request browser notification permission if not yet granted
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      try {
+        Notification.requestPermission();
+      } catch (e) {
+        console.warn('Notification permission request error:', e);
+      }
+    }
   }, []);
 
   // Fetch League data (teams and scoreboard) whenever the selected league changes
