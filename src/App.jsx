@@ -516,6 +516,8 @@ export default function App() {
           selectedSport={selectedSport}
           selectedLeague={selectedLeague}
           gameReminders={gameReminders}
+          customSchedules={customSchedules}
+          customTeams={customTeams}
           onOpenAlarmModal={handleOpenAlarmModal}
         />
       </Modal>

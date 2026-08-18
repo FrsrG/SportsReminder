@@ -147,6 +147,28 @@ export function updateCustomTeamInStore(updatedTeam, newGames) {
 }
 
 /**
+ * Retrieve all custom games for a specific custom league ID, sportSlug, or custom team.
+ */
+export function getCustomLeagueGames(leagueIdOrSlug) {
+  if (!leagueIdOrSlug) return [];
+  const normalized = String(leagueIdOrSlug).toLowerCase().trim();
+  return customSchedulesStore.filter(g => {
+    if (!g) return false;
+    if (g.sportSlug && g.sportSlug.toLowerCase().includes(normalized)) return true;
+    if (g.leagueId && g.leagueId.toLowerCase().includes(normalized)) return true;
+    if (g.customTeamId && g.customTeamId.toLowerCase().includes(normalized)) return true;
+    if (customTeamsStore.some(t => 
+      (String(t.leagueId).toLowerCase().includes(normalized) || 
+       String(t.sportSlug).toLowerCase().includes(normalized) || 
+       String(t.id).toLowerCase().includes(normalized) || 
+       String(t.leagueName || t.name).toLowerCase().includes(normalized)) &&
+      (g.customTeamId === t.id || g.sportSlug === t.sportSlug || g.homeTeam?.id === t.id || g.awayTeam?.id === t.id)
+    )) return true;
+    return false;
+  });
+}
+
+/**
  * Delete custom team and its schedule from local cache.
  */
 export function deleteCustomTeamFromStore(teamId) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SPORTS_LIST } from './SportSelector.jsx';
-import { SUPPORTED_LEAGUES, LEAGUES_FLAT } from '../leagueManager.js';
+import { SUPPORTED_LEAGUES, LEAGUES_FLAT, getCustomLeagueGames } from '../leagueManager.js';
 import { fetchLeagueScoreboardForMonth, extractScoreString, getGrandPrixCountryCode } from '../espnApi.js';
 import F1Nameplate from './F1Nameplate.jsx';
 
@@ -66,6 +66,8 @@ export default function CalendarModal({
   selectedSport = 'soccer', 
   selectedLeague = 'mls',
   gameReminders = {},
+  customSchedules = [],
+  customTeams = [],
   onOpenAlarmModal
 }) {
   const realToday = new Date();
@@ -81,6 +83,24 @@ export default function CalendarModal({
   const [leagueGames, setLeagueGames] = useState([]);
   const [loadingLeague, setLoadingLeague] = useState(false);
 
+  // Dynamic Leagues for currently selected calSport (combines built-in + all custom teams)
+  const builtInLeagues = SUPPORTED_LEAGUES[calSport] || [];
+  const customLeaguesForSport = (customTeams || [])
+    .filter(t => (t.sportCategory || 'soccer') === calSport && (t.leagueId || t.leagueName))
+    .map(t => ({
+      id: t.leagueId || `custom-${(t.leagueName || t.name).toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      name: t.leagueName || t.name,
+      sportSlug: t.sportSlug,
+      logo: t.logo,
+      isCustom: true
+    }));
+
+  const leaguesMap = new Map();
+  [...builtInLeagues, ...customLeaguesForSport].forEach(l => {
+    if (l && l.id) leaguesMap.set(l.id, l);
+  });
+  const availableLeagues = leaguesMap.size > 0 ? Array.from(leaguesMap.values()) : (SUPPORTED_LEAGUES.soccer || []);
+
   // Sync initial sport/league props
   useEffect(() => {
     setCalSport(selectedSport);
@@ -93,8 +113,76 @@ export default function CalendarModal({
     if (viewMode !== 'league') return;
 
     async function loadMonthlyLeagueData() {
-      const activeLeagueData = LEAGUES_FLAT[calLeague] || LEAGUES_FLAT.mls;
-      if (!activeLeagueData) return;
+      const activeLeagueData = availableLeagues.find(l => l.id === calLeague) || 
+                               LEAGUES_FLAT[calLeague] || 
+                               (customTeams && customTeams.find(t => t.leagueId === calLeague || t.id === calLeague || t.sportSlug === calLeague));
+
+      if (!activeLeagueData) {
+        if (isMounted) setLeagueGames([]);
+        return;
+      }
+
+      // Handle Custom Leagues & Custom Team Schedules
+      const isCustomLeague = activeLeagueData.isCustom || 
+                             activeLeagueData.sportSlug?.includes('/custom-') || 
+                             calLeague?.startsWith('custom-') ||
+                             (customTeams && customTeams.some(t => t.leagueId === calLeague || t.id === calLeague || t.sportSlug === calLeague));
+
+      if (isCustomLeague) {
+        setLoadingLeague(false);
+        const sourceCustom = (customSchedules && customSchedules.length > 0) 
+          ? customSchedules 
+          : getCustomLeagueGames(calLeague);
+
+        const normLeague = String(calLeague || '').toLowerCase().trim();
+        const normSlug = String(activeLeagueData.sportSlug || '').toLowerCase().trim();
+
+        const matchingGames = sourceCustom.filter(g => {
+          if (!g) return false;
+          const gSlug = String(g.sportSlug || '').toLowerCase();
+          const gTeamId = String(g.customTeamId || '').toLowerCase();
+          const gLeagueId = String(g.leagueId || '').toLowerCase();
+
+          if (normSlug && gSlug === normSlug) return true;
+          if (normLeague && (gLeagueId === normLeague || gTeamId === normLeague || gSlug.includes(normLeague))) return true;
+          
+          if (customTeams && customTeams.some(t => {
+            const tLeagueId = String(t.leagueId || '').toLowerCase();
+            const tId = String(t.id || '').toLowerCase();
+            const tSlug = String(t.sportSlug || '').toLowerCase();
+            const tMatch = (tLeagueId === normLeague || tId === normLeague || tSlug === normSlug || tLeagueId.includes(normLeague) || normLeague.includes(tLeagueId));
+            return tMatch && (gTeamId === tId || gSlug === tSlug || String(g.homeTeam?.id).toLowerCase() === tId || String(g.awayTeam?.id).toLowerCase() === tId);
+          })) return true;
+          return false;
+        });
+
+        if (isMounted) {
+          setLeagueGames(matchingGames);
+
+          // Auto-jump calendar to the first scheduled month if current month has 0 games
+          if (matchingGames.length > 0) {
+            const hasGamesInViewMonth = matchingGames.some(g => {
+              const d = new Date(g.date);
+              return !isNaN(d.getTime()) && d.getFullYear() === calYear && d.getMonth() === calMonth;
+            });
+
+            if (!hasGamesInViewMonth) {
+              const validDates = matchingGames
+                .map(g => new Date(g.date))
+                .filter(d => !isNaN(d.getTime()))
+                .sort((a, b) => a.getTime() - b.getTime());
+
+              if (validDates.length > 0) {
+                const upcomingDate = validDates.find(d => d.getTime() >= Date.now()) || validDates[0];
+                setCalYear(upcomingDate.getFullYear());
+                setCalMonth(upcomingDate.getMonth());
+                setSelectedDay(upcomingDate.getDate());
+              }
+            }
+          }
+        }
+        return;
+      }
 
       setLoadingLeague(true);
       try {
@@ -111,13 +199,22 @@ export default function CalendarModal({
 
     loadMonthlyLeagueData();
     return () => { isMounted = false; };
-  }, [viewMode, calLeague, calYear, calMonth]);
+  }, [viewMode, calLeague, calYear, calMonth, customSchedules, customTeams, availableLeagues]);
 
   const handleSportChange = (newSportId) => {
     setCalSport(newSportId);
-    const leaguesForSport = SUPPORTED_LEAGUES[newSportId] || SUPPORTED_LEAGUES.soccer;
-    if (leaguesForSport && leaguesForSport.length > 0) {
-      setCalLeague(leaguesForSport[0].id);
+    const builtIn = SUPPORTED_LEAGUES[newSportId] || [];
+    const customForSport = (customTeams || [])
+      .filter(t => (t.sportCategory || 'soccer') === newSportId && (t.leagueId || t.leagueName))
+      .map(t => ({
+        id: t.leagueId || `custom-${(t.leagueName || t.name).toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        name: t.leagueName || t.name,
+        sportSlug: t.sportSlug,
+        isCustom: true
+      }));
+    const allLeaguesForSport = [...builtIn, ...customForSport];
+    if (allLeaguesForSport.length > 0) {
+      setCalLeague(allLeaguesForSport[0].id);
     }
   };
 
@@ -162,6 +259,7 @@ export default function CalendarModal({
   sourceGames.forEach(g => {
     if (!g || !g.date) return;
     const d = new Date(g.date);
+    if (isNaN(d.getTime())) return;
     if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
       const dayNum = d.getDate();
       if (!gamesByDayMap[dayNum]) gamesByDayMap[dayNum] = [];
@@ -173,8 +271,6 @@ export default function CalendarModal({
   const selectedDateGames = gamesByDayMap[selectedDay] || [];
   const selectedDateObj = new Date(calYear, calMonth, selectedDay);
   const selectedDateFormatted = selectedDateObj.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
-
-  const availableLeagues = SUPPORTED_LEAGUES[calSport] || SUPPORTED_LEAGUES.soccer;
 
   return (
     <div className="calendar-modal-container">

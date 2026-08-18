@@ -157,6 +157,10 @@ export function parseEventToGame(event, defaultSportSlug = '') {
   return result;
 }
 
+const ESPN_HEADERS = {
+  'Accept': 'application/json, text/plain, */*'
+};
+
 /**
  * Fetch current & upcoming scoreboard data for a specific league/sport.
  */
@@ -176,16 +180,21 @@ export async function fetchLeagueScoreboard(sportSlug) {
     const isUFC = targetSlug === 'mma/ufc';
 
     let url = isRacing 
-      ? `https://site.api.espn.com/apis/site/v2/sports/${targetSlug}/scoreboard`
+      ? `https://site.api.espn.com/apis/site/v2/sports/${targetSlug}/scoreboard?limit=1000`
       : (isUFC 
           ? `https://site.api.espn.com/apis/site/v2/sports/${targetSlug}/scoreboard?limit=1000`
           : `https://site.api.espn.com/apis/site/v2/sports/${targetSlug}/scoreboard?limit=1000&dates=${startDateStr}-${endDateStr}`);
     
-    let response = await fetch(url);
+    let response = await fetch(url, { headers: ESPN_HEADERS });
 
     if (!response.ok) {
       url = `https://site.api.espn.com/apis/site/v2/sports/${targetSlug}/scoreboard?limit=1000`;
-      response = await fetch(url);
+      response = await fetch(url, { headers: ESPN_HEADERS });
+    }
+
+    if (!response.ok) {
+      url = `https://site.api.espn.com/apis/site/v2/sports/${targetSlug}/scoreboard`;
+      response = await fetch(url, { headers: ESPN_HEADERS });
     }
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -194,7 +203,7 @@ export async function fetchLeagueScoreboard(sportSlug) {
     // If data.events is empty or missing, retry targetSlug base scoreboard URL
     if (!data.events || data.events.length === 0) {
       const fallbackUrl = `https://site.api.espn.com/apis/site/v2/sports/${targetSlug}/scoreboard`;
-      const fallbackResp = await fetch(fallbackUrl);
+      const fallbackResp = await fetch(fallbackUrl, { headers: ESPN_HEADERS });
       if (fallbackResp.ok) {
         data = await fallbackResp.json();
       }
@@ -307,11 +316,11 @@ export async function fetchLeagueScoreboardForMonth(sportSlug, year, month) {
     const endDateStr = `${yStr}${mStr}${lDayStr}`;
 
     let url = `https://site.api.espn.com/apis/site/v2/sports/${safeSlug}/scoreboard?limit=1000&dates=${startDateStr}-${endDateStr}`;
-    let response = await fetch(url);
+    let response = await fetch(url, { headers: ESPN_HEADERS });
 
     if (!response.ok) {
       url = `https://site.api.espn.com/apis/site/v2/sports/${safeSlug}/scoreboard?limit=1000`;
-      response = await fetch(url);
+      response = await fetch(url, { headers: ESPN_HEADERS });
     }
 
     if (!response.ok) return [];
@@ -337,12 +346,12 @@ export async function fetchTeamSchedule(sportSlug = 'soccer/usa.1', teamId) {
 
   try {
     let url = `https://site.api.espn.com/apis/site/v2/sports/${safeSlug}/teams/${teamId}/schedule`;
-    let response = await fetch(url);
+    let response = await fetch(url, { headers: ESPN_HEADERS });
     let data = response.ok ? await response.json() : null;
 
     if (!data || !data.events || data.events.length === 0) {
       const seasonUrl = `https://site.api.espn.com/apis/site/v2/sports/${safeSlug}/teams/${teamId}/schedule?season=${year}`;
-      const seasonResp = await fetch(seasonUrl);
+      const seasonResp = await fetch(seasonUrl, { headers: ESPN_HEADERS });
       if (seasonResp.ok) {
         const seasonData = await seasonResp.json();
         if (seasonData && seasonData.events && seasonData.events.length > 0) {
@@ -353,7 +362,7 @@ export async function fetchTeamSchedule(sportSlug = 'soccer/usa.1', teamId) {
 
     if (!data || !data.events || data.events.length === 0) {
       const prevSeasonUrl = `https://site.api.espn.com/apis/site/v2/sports/${safeSlug}/teams/${teamId}/schedule?season=${prevYear}`;
-      const prevSeasonResp = await fetch(prevSeasonUrl);
+      const prevSeasonResp = await fetch(prevSeasonUrl, { headers: ESPN_HEADERS });
       if (prevSeasonResp.ok) {
         const prevSeasonData = await prevSeasonResp.json();
         if (prevSeasonData && prevSeasonData.events && prevSeasonData.events.length > 0) {
